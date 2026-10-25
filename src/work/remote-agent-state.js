@@ -63,15 +63,20 @@ export function createRemoteAgentController(api, publish) {
     }
   };
   return {
-    async connect(input, open = () => api.remoteAgentConnect(input)) {
+    async connect(input, open = () => api.remoteAgentConnect(input), options = {}) {
       const current = ++generation;
-      stopPolling();
-      ++selection;
+      const keepPrevious = Boolean(options?.preservePreviousOnError && connection);
       const previous = connection;
-      connection = null;
-      await close(previous);
-      if (disposed || current !== generation) return;
-      update({ connection: null, catalog: null, history: null, live: null, sessionId: '', busy: true, error: '' });
+      if (keepPrevious) {
+        update({ busy: true, error: '' });
+      } else {
+        stopPolling();
+        ++selection;
+        connection = null;
+        await close(previous);
+        if (disposed || current !== generation) return;
+        update({ connection: null, catalog: null, history: null, live: null, sessionId: '', busy: true, error: '' });
+      }
       let opened;
       try {
         opened = await open();
@@ -80,8 +85,14 @@ export function createRemoteAgentController(api, publish) {
         if (opened.capabilities?.catalog !== true) throw 'REMOTE_UNSUPPORTED_CAPABILITY';
         const catalog = await api.remoteAgentCatalog(opened.connectionId);
         if (disposed || current !== generation) { await close(opened); return; }
+        if (keepPrevious) {
+          stopPolling();
+          ++selection;
+          if (previous && previous.connectionId !== opened.connectionId) await close(previous);
+          if (disposed || current !== generation) { await close(opened); return; }
+        }
         connection = opened;
-        update({ connection, catalog, busy: false });
+        update({ connection, catalog, history: null, live: null, sessionId: '', busy: false, error: '' });
         return true;
       } catch (error) {
         await close(opened);

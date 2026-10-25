@@ -117,4 +117,171 @@ describe('saved connections and safe reconnect', () => {
     const { api, service } = fixture(); await service.resume(); await service.lock();
     expect(service.state.unlocked).toBe(false); expect(service.state.connection).toBeNull(); expect(api.remoteAgentLock).toHaveBeenCalledTimes(1); await service.dispose();
   });
+
+  it('stages QR invitations for confirmation without exposing tokens or connecting early', async () => {
+    const { api, service } = fixture();
+    api.remoteAgentSave = vi.fn();
+    const token = 'synth+token/2026=alpha&beta%25gamma';
+    const qr =
+      `bob://remote-agent?v=1&adapter=dsh` +
+      `&name=${encodeURIComponent('X1T 远程节点')}` +
+      `&endpoint=${encodeURIComponent('https://node2.invalid')}` +
+      `&token=${encodeURIComponent(token)}`;
+
+    expect(service.stageQr(qr)).toBe(true);
+    expect(service.state.pendingQr).toEqual({
+      v: '1',
+      adapter: 'dsh',
+      name: 'X1T 远程节点',
+      endpoint: 'https://node2.invalid',
+      supported: true,
+    });
+    expect(JSON.stringify(service.state)).not.toContain(token);
+    expect(api.remoteAgentSave).not.toHaveBeenCalled();
+
+    service.cancelQr();
+    expect(service.state.pendingQr).toBeNull();
+    expect(await service.confirmQr()).toBe(false);
+    expect(api.remoteAgentSave).not.toHaveBeenCalled();
+    await service.dispose();
+  });
+
+  it('recognizes adapter=bob-core in QR invitations but blocks connection with explicit unsupported error', async () => {
+    const { api, service } = fixture();
+    api.remoteAgentSave = vi.fn();
+    const qr =
+      'bob://remote-agent?v=1&adapter=bob-core&name=Bob%20Online&endpoint=https%3A%2F%2Fagent.bobbik.org&token=synth-core-token';
+
+    expect(service.stageQr(qr)).toBe(true);
+    expect(service.state.pendingQr).toEqual({
+      v: '1',
+      adapter: 'bob-core',
+      name: 'Bob Online',
+      endpoint: 'https://agent.bobbik.org',
+      supported: false,
+    });
+    expect(service.state.error).toBe('REMOTE_BOB_CORE_UNSUPPORTED');
+    expect(JSON.stringify(service.state)).not.toContain('synth-core-token');
+    expect(await service.confirmQr()).toBe(false);
+    expect(api.remoteAgentSave).not.toHaveBeenCalled();
+    await service.dispose();
+  });
+
+  it('does not overwrite existing connections or disconnect active session when QR auth fails or duplicates endpoint', async () => {
+    const { api, service, profiles } = fixture();
+    await service.resume();
+    expect(service.state.connection?.profileId).toBe('p1');
+
+    api.remoteAgentSave = vi.fn(async () => {
+      throw 'REMOTE_AUTH';
+    });
+
+    // 1. Duplicate endpoint is blocked before calling remoteAgentSave
+    const duplicateQr =
+      'bob://remote-agent?v=1&adapter=dsh&name=OverwriteAttempt&endpoint=https%3A%2F%2Ftest.invalid&token=synth-dup-token';
+    expect(service.stageQr(duplicateQr)).toBe(true);
+    expect(await service.confirmQr()).toBe(false);
+    expect(service.state.error).toBe('REMOTE_QR_OVERWRITE_BLOCKED');
+    expect(api.remoteAgentSave).not.toHaveBeenCalled();
+    expect(service.state.profiles).toHaveLength(1);
+    expect(service.state.profiles[0].name).toBe('Test');
+    expect(service.state.connection?.profileId).toBe('p1');
+
+    // 2. Auth failure on a new endpoint preserves existing connection and profiles
+    const badAuthQr =
+      'bob://remote-agent?v=1&adapter=dsh&name=Node2&endpoint=https%3A%2F%2Fnode2.invalid&token=synth-bad-token';
+    expect(service.stageQr(badAuthQr)).toBe(true);
+    expect(await service.confirmQr()).toBe(false);
+    expect(service.state.error).toBe('REMOTE_AUTH');
+    expect(service.state.pendingQr).toBeNull();
+    expect(profiles).toHaveLength(1);
+    expect(service.state.profiles).toHaveLength(1);
+    expect(service.state.connection?.profileId).toBe('p1');
+    expect(api.remoteAgentAction).not.toHaveBeenCalled();
+    await service.dispose();
+  });
+
+  it('unlocks vault, authenticates DSH, saves alongside existing profiles, and recovers after lock/restart', async () => {
+    const { api, service, profiles } = fixture();
+    await service.lock();
+    expect(service.state.unlocked).toBe(false);
+
+    const specialToken = 'synth+tok/2026=1&2%253';
+    api.remoteAgentSave = vi.fn(async (input, name) => {
+      expect(input).toEqual({
+        adapter: 'dsh',
+        endpoint: 'https://node2.invalid',
+        token: specialToken,
+      });
+      const created = {
+        id: 'p2',
+        name,
+        endpoint: 'https://node2.invalid/',
+        sessionId: '',
+        autoReconnect: true,
+        uncertainSessions: [],
+      };
+      profiles.push(created);
+      return {
+        connectionId: 'c2',
+        profileId: 'p2',
+        adapter: 'dsh',
+        endpoint: 'https://node2.invalid/',
+        capabilities: { catalog: true, history: true, send: true },
+      };
+    });
+    api.remoteAgentReconnect = vi.fn(async id => ({
+      connectionId: `re-${id}`,
+      profileId: id,
+      adapter: 'dsh',
+      endpoint: id === 'p2' ? 'https://node2.invalid/' : 'https://test.invalid/',
+      capabilities: { catalog: true, history: true, send: true },
+    }));
+
+    const qr =
+      `bob://remote-agent?v=1&adapter=dsh` +
+      `&name=${encodeURIComponent('X1T 扫码节点')}` +
+      `&endpoint=${encodeURIComponent('https://node2.invalid')}` +
+      `&token=${encodeURIComponent(specialToken)}`;
+
+    expect(service.stageQr(qr)).toBe(true);
+    expect(await service.confirmQr()).toBe(true);
+    expect(api.remoteAgentUnlock).toHaveBeenCalledTimes(1);
+    expect(api.remoteAgentSave).toHaveBeenCalledTimes(1);
+    expect(api.remoteAgentAction).not.toHaveBeenCalled();
+    expect(service.state.unlocked).toBe(true);
+    expect(service.state.connection?.profileId).toBe('p2');
+    expect(service.state.profiles.map(p => p.id)).toEqual(['p1', 'p2']);
+    expect(JSON.stringify(service.state)).not.toContain(specialToken);
+
+    // Lock vault and simulate restart recovery without QR token
+    await service.lock();
+    expect(service.state.unlocked).toBe(false);
+    expect(service.state.connection).toBeNull();
+
+    expect(await service.unlock()).toBe(true);
+    expect(service.state.profiles.map(p => p.id)).toEqual(['p1', 'p2']);
+    expect(await service.connectProfile('p2')).toBe(true);
+    expect(service.state.connection?.profileId).toBe('p2');
+    expect(api.remoteAgentSave).toHaveBeenCalledTimes(1);
+    await service.dispose();
+  });
+
+  it('clears staged QR credentials when system unlock is cancelled or vault is locked', async () => {
+    const { api, service } = fixture();
+    await service.lock();
+    api.remoteAgentUnlock.mockRejectedValueOnce('REMOTE_SYSTEM_AUTH_CANCELLED');
+    api.remoteAgentSave = vi.fn();
+
+    const qr =
+      'bob://remote-agent?v=1&adapter=dsh&name=NodeCancel&endpoint=https%3A%2F%2Fcancel.invalid&token=synth-cancel-token';
+    expect(service.stageQr(qr)).toBe(true);
+    expect(await service.confirmQr()).toBe(false);
+    expect(service.state.error).toBe('REMOTE_SYSTEM_AUTH_CANCELLED');
+    expect(service.state.pendingQr).toBeNull();
+    expect(await service.confirmQr()).toBe(false);
+    expect(api.remoteAgentSave).not.toHaveBeenCalled();
+    expect(JSON.stringify(service.state)).not.toContain('synth-cancel-token');
+    await service.dispose();
+  });
 });

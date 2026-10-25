@@ -52,11 +52,14 @@
 import { useDialog } from '@/composables/useDialog.js';
 const { showConfirm, showAlert, showPrompt } = useDialog();
 
-import { ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { ref, inject, nextTick, onMounted, onUnmounted } from 'vue';
+import { isRemoteAgentQrCandidate, isSensitiveTokenUrl } from '@/work/remote-agent-qr.js';
+import { getRemoteAgentService } from '@/work/remote-agent-service.js';
 import { useI18n } from 'vue-i18n';
 import { CalendarRange, Check, Cpu, QrCode } from 'lucide-vue-next';
 
 const { t: $t } = useI18n();
+const openRemoteConnections = inject('openRemoteConnections', () => {});
 defineProps({ todayCount: { type: Number, default: 0 } });
 const emit = defineEmits(['open-today']);
 
@@ -103,6 +106,12 @@ async function openScanPairing() {
       document.body.classList.remove('scanner-active');
       
       if (code) {
+        if (isRemoteAgentQrCandidate(code) || isSensitiveTokenUrl(code)) {
+          openRemoteConnections();
+          await nextTick();
+          getRemoteAgentService(window.appAPI).stageQr(code);
+          return;
+        }
         try {
           const payload = JSON.parse(code);
           if (payload && payload.device_id) {

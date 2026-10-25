@@ -8,6 +8,7 @@ All notable changes to bob-agent will be documented in this file.
 - Work 以远程会话与执行交互为主，连接不再随页面卸载销毁；原有项目、目标、任务、决策、动态与审阅入口保留在“项目与工作记录”。
 - 临时断线有限退避重连；认证或协议错误停止自动重试；绝不自动重发指令/审批。提交结果不明的会话跨重启保留复核门槛。
 - DSH follow snapshot 缺少 hasMore 时不再报协议错误，也不把近期快照误称完整历史。
+- 支持 `bob://remote-agent?v=1` Work 节点扫码配对：单次解码、纯 HTTPS 根地址校验、扫码后先展示节点信息再由用户确认解锁与认证保存；支持识别 `bob-core` 并显式提示暂不支持连接，不覆盖已有连接。
 - 主应用与安装器版本统一为 0.9.30，Android versionCode 为 9030。本轮未生成安装包或发布 Release。
 
 本地测试与未验边界见 [连接记忆与 Work 重组证据](docs/evidence/remote-agent/RH-02-connection-memory.md)。

@@ -829,6 +829,8 @@
 </template>
 <script setup>
 import RemoteAgentConnections from '../../components/work/RemoteAgentConnections.vue';
+import { isRemoteAgentQrCandidate } from '@/work/remote-agent-qr.js';
+import { getRemoteAgentService } from '@/work/remote-agent-service.js';
 const getAssetUrl = (name) => `/logos/${name}`;
 import { ref, onMounted, onUnmounted, computed, inject, watch } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -1227,6 +1229,10 @@ const handleMobileScan = async () => {
 };
 
 const processPairingCode = async (code) => {
+  if (isRemoteAgentQrCandidate(code)) {
+    getRemoteAgentService(window.appAPI).stageQr(code);
+    return;
+  }
   let unlistenProgress = null;
   if (window.__TAURI_IPC__) {
     unlistenProgress = await listen('sync:progress', (event) => {
