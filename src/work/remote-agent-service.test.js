@@ -51,7 +51,8 @@ describe('saved connections and safe reconnect', () => {
     const { api, service } = fixture(); expect(api.remoteAgentProfiles).not.toHaveBeenCalled();
     expect(getRemoteAgentService(api)).toBe(getRemoteAgentService(api));
     await service.resume(); expect(service.state.sessionId).toBe('s1');
-    await service.resume(); expect(api.remoteAgentReconnect).toHaveBeenCalledTimes(1);
+    await service.resume(); expect(api.remoteAgentReconnect).toHaveBeenCalledTimes(1); expect(api.remoteAgentCatalog).toHaveBeenCalledTimes(1);
+    await service.refresh(); expect(api.remoteAgentCatalog).toHaveBeenCalledTimes(2);
     await service.dispose();
   });
   it('does not connect while locked or replay an execution', async () => {

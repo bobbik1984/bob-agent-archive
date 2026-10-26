@@ -6,7 +6,7 @@
       <button @click="openConnections"><Settings2 :size="16" />{{ t('remote_agent.manage') }}</button>
     </header>
     <p v-if="!state.connection" class="remote-hint">{{ t(state.unlocked ? 'remote_agent.choose_connection' : 'remote_agent.unlock_in_settings') }}</p>
-    <p v-if="state.reconnecting || state.busy" role="status">{{ t('remote_agent.connecting') }}</p>
+    <p v-if="!state.connection && (state.reconnecting || state.busy)" role="status">{{ t('remote_agent.connecting') }}</p>
     <button v-if="state.selectedProfileId && state.error && !state.busy" @click="controller.connectProfile(state.selectedProfileId)">{{ t('remote_agent.retry') }}</button>
     <template v-if="state.connection">
       <header class="remote-toolbar">
@@ -132,10 +132,8 @@ watch(() => state.sessionId, id => {
   if (project) workspaceId.value = project.workspaceId;
 });
 const activeDrawer = inject('activeDrawer', ref('work'));
-watch(activeDrawer, value => { if (value === 'work') void controller.resume(); });
-function onForeground() { if (document.visibilityState === 'visible' && activeDrawer.value === 'work') void controller.resume(); }
-onMounted(() => { if (activeDrawer.value === 'work') void controller.resume(); document.addEventListener('visibilitychange', onForeground); });
-onBeforeUnmount(() => document.removeEventListener('visibilitychange', onForeground));
+watch(activeDrawer, value => { if (value === 'work' && !state.connection) void controller.resume(); });
+onMounted(() => { if (activeDrawer.value === 'work' && !state.connection) void controller.resume(); });
 </script>
 
 <style scoped>

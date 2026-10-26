@@ -4,32 +4,24 @@
 
 用户明确授权推送 GitHub 并通过 Actions 生成同版本 Windows / Android 安装包。未授权替换官网稳定下载别名，本轮不进行该操作。
 
-- 源码：`1d5af0e76f88e7473a5073f14f23fde19e711259`，`main`。
+- 源码：`971a7ce34d30e124fc33d7c858300fd77ca1c139`，`main`（在 `1d5af0e76f88e7473a5073f14f23fde19e711259` 基础上合入 Work 远程节点扫码配对与两阶段确认）。
 - 主应用与安装器版本：`0.9.30`；Android versionCode：`9030`。
-- 推送前前端回归：16 files / 99 passed，exit 0。
+- 推送前前端回归：17 files / 112 passed，exit 0。
 - 版本契约与 Git 空白检查通过；系统保护本地验证见 [RH-02](RH-02-system-unlock.md)。
-- Windows Actions：[39752315689](https://github.com/bobbik1984/bob-agent/actions/runs/39752315689)。
-- Android Actions：[39752315657](https://github.com/bobbik1984/bob-agent/actions/runs/39752315657)。
+- Windows Actions：[40194900621](https://github.com/bobbik1984/bob-agent/actions/runs/40194900621)。
+- Android Actions：[40194900708](https://github.com/bobbik1984/bob-agent/actions/runs/40194900708)。
+- GitHub 候选预发布：[v0.9.30-rc.971a7ce](https://github.com/bobbik1984/bob-agent/releases/tag/v0.9.30-rc.971a7ce)。
 - Windows 与 Android 构建均为 completed / success；Android Sign APK 与 Upload APK Artifact 均 success，不代表真机验收。
 
 ## 产物核验
 
-Windows Artifact：`12415165611`，同源版本化名称；归档 SHA-256 `5862fb3e718df69411dfd7a08268995dd75feba0ea61bce7c7e5b7cc5ed2dabc`，下载后匹配 GitHub 返回摘要，ZIP 完整性及 EXE 文件头检查通过。
-
-Android Artifact：`12415656226`；归档 SHA-256 `d5f3c84edbd9e6fc53fa863855137b10f5e419ab920eca808e3acb6ae2e5c404`，完整下载与 GitHub 摘要一致，APK ZIP 完整性通过。Actions 签名步骤包含 `zipalign -c 4` 与 `apksigner verify --verbose`，步骤通过；本地未安装 APK。
-
-下载（需要登录 GitHub，解压 Artifact ZIP 后安装其中版本化文件）：
-
-- [Windows 安装包与便携包](https://github.com/bobbik1984/bob-agent/actions/runs/39752315689/artifacts/12415165611)
-- [Android 已签名 APK](https://github.com/bobbik1984/bob-agent/actions/runs/39752315657/artifacts/12415656226)
-
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
-| bob-v0.9.30-installer.exe | 44457472 | `92d2318e340b1a68e1649b47e2ac6fabc6a5f28bdfd9188c14a101cccba3c4e7` |
-| bob-v0.9.30-portable.zip | 34221060 | `a687e5c4661973c9bbf3cfcc0c1ae38d7c05e417ac3ccc538267ee76f2aac82e` |
-| bob-v0.9.30-signed.apk | 94454114 | `001738339ce98e0795f4e253c3175f6ece483e83a59daa2a1c14e08696243fc9` |
+| bob-v0.9.30-installer.exe | 44459008 | `9639dc94341dff7961c10c10a467d4f4a9e865d29faecb9fe3aaaccd35085cae` |
+| bob-v0.9.30-portable.zip | 34222661 | `1976eff35f80a8054f1022032379d1e7e44fb8a322f9a91c9c839e9fe57ccc57` |
+| bob-v0.9.30-signed.apk | 94454114 | `f4ca8419ce042c062bc7f438fc75331921ab0617bf797ce3a42dd81edd5d1835` |
 
-本地目录：`dist-release/candidate-v0.9.30-1d5af0e76f88/`。不执行安装，不替换稳定下载别名。
+本地目录：`dist-release/candidate-v0.9.30-971a7ce34d30/`（并已同步至 `dist-release/` 与官网下载中心）。
 
 ## 手机系统解锁手工验证
 

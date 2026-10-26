@@ -94,33 +94,41 @@ impl Dsh {
             .timeout(TIMEOUT)
             .build()
             .map_err(|_| "REMOTE_NETWORK")?;
-        let mut connect = base.join("connect").map_err(|_| PROTOCOL)?;
-        connect
-            .query_pairs_mut()
-            .append_pair("token", &secret)
-            .append_pair("interactions", "answer");
-        // Never forward raw transport errors (they may include the token URL).
-        let response = client
-            .get(connect.clone())
-            .send()
-            .await
-            .map_err(|_| "REMOTE_NETWORK")?;
-        if response.status() == 401 || response.status() == 403 {
-            return Err("REMOTE_AUTH".into());
-        }
-        if response.status() != 302 {
-            return Err(PROTOCOL.into());
-        }
-        let location = response
-            .headers()
-            .get(header::LOCATION)
-            .and_then(|v| v.to_str().ok())
-            .ok_or(PROTOCOL)?;
-        let mux = connect.join(location).map_err(|_| PROTOCOL)?;
-        let expected = base.join("api/remote.mux").map_err(|_| PROTOCOL)?;
-        if mux != expected {
-            return Err("REMOTE_REDIRECT".into());
-        }
+        let mut index = base.clone();
+        index.query_pairs_mut().append_pair("token", &secret);
+        let index_res = client.get(index.clone()).send().await.map_err(|_| "REMOTE_NETWORK")?;
+        let response = if index_res.status() == 404 {
+            let mut connect = base.join("connect").map_err(|_| PROTOCOL)?;
+            connect
+                .query_pairs_mut()
+                .append_pair("token", &secret)
+                .append_pair("interactions", "answer");
+            // Never forward raw transport errors (they may include the token URL).
+            let res = client.get(connect.clone()).send().await.map_err(|_| "REMOTE_NETWORK")?;
+            if res.status() == 401 || res.status() == 403 {
+                return Err("REMOTE_AUTH".into());
+            }
+            if res.status() != 302 {
+                return Err(PROTOCOL.into());
+            }
+            let location = res.headers().get(header::LOCATION).and_then(|v| v.to_str().ok()).ok_or(PROTOCOL)?;
+            if connect.join(location).map_err(|_| PROTOCOL)? != base.join("api/remote.mux").map_err(|_| PROTOCOL)? {
+                return Err("REMOTE_REDIRECT".into());
+            }
+            res
+        } else {
+            if index_res.status() == 401 || index_res.status() == 403 {
+                return Err("REMOTE_AUTH".into());
+            }
+            if index_res.status() != 303 {
+                return Err(PROTOCOL.into());
+            }
+            let location = index_res.headers().get(header::LOCATION).and_then(|v| v.to_str().ok()).ok_or(PROTOCOL)?;
+            if index.join(location).map_err(|_| PROTOCOL)? != base {
+                return Err("REMOTE_REDIRECT".into());
+            }
+            index_res
+        };
         let cookies: Vec<_> = response
             .headers()
             .get_all(header::SET_COOKIE)
@@ -197,8 +205,16 @@ impl Dsh {
         let task = tokio::spawn(async move {
             let mut pending: HashMap<String, Reply> = HashMap::new();
             let mut watch_id: Option<String> = None;
+            let mut keepalive = tokio::time::interval_at(
+                tokio::time::Instant::now() + Duration::from_secs(25),
+                Duration::from_secs(25),
+            );
+            keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 tokio::select! {
+                    _ = keepalive.tick() => {
+                        if socket.send(Message::Ping(Vec::new().into())).await.is_err() { break; }
+                    },
                     command = receiver.recv() => match command {
                         Some(Command::Follow { id, session, reply }) => {
                             let (endpoint, args) = if let Some(session) = session {

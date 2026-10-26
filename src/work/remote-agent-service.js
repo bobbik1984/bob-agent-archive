@@ -55,6 +55,10 @@ export function createRemoteAgentService(api) {
     } finally { connecting = false; if (current === generation) scheduleRetry(); }
   }
   async function select(id) {
+    if ((!state.connection || state.live?.ready === false) && state.selectedProfileId && !connecting) {
+      const ok = await connectProfile(state.selectedProfileId);
+      if (!ok) return;
+    }
     const current = generation, selectedProfileId = state.selectedProfileId;
     await controller.select(id);
     if (current === generation && state.history?.sessionId === id && selectedProfileId) {
@@ -64,10 +68,11 @@ export function createRemoteAgentService(api) {
   }
   async function resume() {
     if (disposed || paused || connecting) return;
+    if (state.connection && !state.error && state.live?.ready !== false) return;
     await load();
     if (!state.unlocked) return;
     if (['REMOTE_AUTH', 'REMOTE_PROTOCOL'].includes(state.error)) return;
-    if (state.connection && !state.error && state.live?.ready !== false) { await controller.refresh(); scheduleRetry(); return; }
+    if (state.connection && !state.error && state.live?.ready !== false) return;
     const target = profile() || state.profiles.find(p => p.autoReconnect);
     // Authentication/protocol failures require an explicit user action, not a retry loop.
     if (target?.autoReconnect && !['REMOTE_AUTH', 'REMOTE_PROTOCOL'].includes(state.error)) await connectProfile(target.id);
@@ -92,7 +97,14 @@ export function createRemoteAgentService(api) {
     state.pendingQr = null;
   }
   const service = {
-    state, load, resume, select, connectProfile, refresh: () => controller.refresh(), disconnect,
+    state, load, resume, select, connectProfile,
+    async refresh() {
+      if ((!state.connection || state.live?.ready === false) && state.selectedProfileId && !connecting) {
+        return await connectProfile(state.selectedProfileId);
+      }
+      return await controller.refresh();
+    },
+    disconnect,
     stageQr(rawCode) {
       clearQr();
       const parsed = parseRemoteAgentQr(rawCode);
@@ -199,6 +211,13 @@ export function createRemoteAgentService(api) {
     },
     async send(text, id) {
       if (service.needsReview()) return false;
+      if ((!state.connection || state.live?.ready === false) && state.selectedProfileId && !connecting) {
+        const currentSession = state.sessionId;
+        const restored = await connectProfile(state.selectedProfileId);
+        if (!restored) return false;
+        if (currentSession && state.sessionId !== currentSession) await controller.select(currentSession);
+        if (service.needsReview()) return false;
+      }
       const ok = await controller.send(text, id); await load(); return ok;
     },
     async answer(id, answer) {
