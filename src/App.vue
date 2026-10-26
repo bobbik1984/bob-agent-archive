@@ -182,9 +182,6 @@
         </div>
         <div v-show="!isMobile && activeDrawer === 'work'" class="drawer-content">
           <nav class="settings-nav">
-            <button class="settings-nav-item" @click="openWorkRecords">
-              <BriefcaseBusiness :size="16" /><span>{{ $t('remote_agent.project_records') }}</span>
-            </button>
             <button class="settings-nav-item" @click="activeSettingsPanel = 'connections'; activeDrawer = 'settings'">
               <Settings :size="16" /><span>{{ $t('remote_agent.manage') }}</span>
             </button>
@@ -275,10 +272,7 @@
           />
         </div>
         <div class="view-wrapper" v-show="activeDrawer === 'work'">
-          <WorkView
-            :active-panel="activeWorkPanel"
-            @update:active-panel="activeWorkPanel = $event"
-          />
+          <WorkView />
         </div>
         <div class="view-wrapper" v-show="activeDrawer === 'knowledge'">
           <KnowledgeGraphView 
@@ -611,9 +605,6 @@ const scheduleNavItems = computed(() => [
   { id: 'cron', icon: Timer, label: t('inbox.auto_tasks') || '计划任务' },
 ]);
 
-function openWorkRecords() {
-  window.dispatchEvent(new CustomEvent('work:open-records'));
-}
 
 const modelInfo = computed(() => {
   if (!currentModel.value) return { name: t('app.not_configured'), logo: null };
