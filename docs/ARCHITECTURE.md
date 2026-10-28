@@ -69,4 +69,4 @@
 
 ## 实现边界补充（2026-10-28）
 
-连接/安全设计见已批准的[connectivity](wiki/connectivity.md)与[threat-model](wiki/threat-model.md)。首段源码仅实现kernel本地Outbox和App发送控制器；UI不自建网络重试状态机。预热是独立后台动作，不成为本地保存的前置条件。真实Home认证、持久Inbox消费和异步dispatcher尚未接通，不能把本地保存提升为对端已采用或模型已运行。
+连接/安全设计见已批准的[connectivity](wiki/connectivity.md)与[threat-model](wiki/threat-model.md)。本地Outbox、App发送控制器及共享唤醒/Home接收/调度内核已实现；UI不自建网络重试状态机。预热是独立后台动作，不成为本地保存的前置条件。持久Inbox消费与异步dispatcher已通过本地集成检查，真实Home认证/传输和UI IPC尚未接通，不能把本地保存提升为对端已采用或模型已运行。

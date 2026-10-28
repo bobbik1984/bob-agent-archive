@@ -58,6 +58,7 @@ pub enum AttemptOutcome {
 
 /// Trusted adapter input, not an authentication implementation. The adapter
 /// must authenticate the Home before passing this receipt to the kernel.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HomeReceipt {
     pub request_id: String,
     pub home_device_id: String,
@@ -68,7 +69,7 @@ pub struct HomeReceipt {
 
 // Field order matters: close SQLite before dropping the ownership lock.
 pub struct Store {
-    db: Connection,
+    pub(crate) db: Connection,
     _owner: File,
 }
 
@@ -98,7 +99,7 @@ fn reject_link(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn digest(bytes: &[u8]) -> String {
+pub(crate) fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
@@ -264,7 +265,7 @@ impl Store {
         let tx = self
             .db
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let changed = tx.execute("UPDATE intent_outbox SET send_state='dispatching',transport_evidence='started_or_possible',attempts=attempts+1,dispatched_at=?2 WHERE request_id=?1 AND send_state IN ('local_saved','queued_for_wakeup','not_dispatched') AND EXISTS(SELECT 1 FROM home_authority h WHERE h.device_id=intent_outbox.target_device_id AND h.epoch=intent_outbox.home_epoch) AND NOT EXISTS(SELECT 1 FROM intent_outbox blocker WHERE blocker.session_id=intent_outbox.session_id AND blocker.request_id!=intent_outbox.request_id AND blocker.lane='normal' AND blocker.send_state IN ('dispatching','dispatched','unknown_send'))", params![id, now])?;
+        let changed = tx.execute("UPDATE intent_outbox SET send_state='dispatching',transport_evidence='started_or_possible',attempts=attempts+1,dispatched_at=?2 WHERE request_id=?1 AND send_state IN ('local_saved','queued_for_wakeup','not_dispatched') AND EXISTS(SELECT 1 FROM home_authority h WHERE h.device_id=intent_outbox.target_device_id AND h.epoch=intent_outbox.home_epoch) AND (lane='control' OR NOT EXISTS(SELECT 1 FROM intent_outbox blocker WHERE blocker.session_id=intent_outbox.session_id AND blocker.request_id!=intent_outbox.request_id AND blocker.lane='normal' AND blocker.send_state IN ('dispatching','dispatched','unknown_send')))", params![id, now])?;
         if changed != 1 {
             return Err(Error::InvalidTransition);
         }

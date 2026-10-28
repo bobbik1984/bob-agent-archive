@@ -62,3 +62,10 @@
 - `Cargo.toml`、`crates/bob-kernel/`：持久消息/Outbox、迁移、预热纯状态机；Windows离线内核9项测试通过；Unix/真实Provider未验证。
 - `apps/bob-app/src/send-controller.mjs`：输入框本地保存确认控制器；注入bridge，尚无Tauri/Provider接线。
 - `apps/bob-app/tests/send-controller.test.mjs`：6项本地模拟bridge测试，不证明真实内核IPC或网络。
+
+## BP2运行链路（2026-10-29）
+
+- `crates/bob-kernel/src/wake.rs`：运行时共享Future、订阅代际和自动休眠；`prewarm.rs`保留纯状态模型，实际运行只由WakeCoordinator管理连接。
+- `src/inbox.rs`（同crate）：Home原子消息/回执与受控停止请求。
+- `src/dispatch.rs`、`src/deadline.rs`（同crate）：持久领取与结果提交、有界异步等待，无跨await数据库借用。
+- `tests/wake.rs`、`tests/inbox.rs`、`tests/dispatch.rs`：10+8+7项运行回归。实际网络/Tauri adapter仍未接。

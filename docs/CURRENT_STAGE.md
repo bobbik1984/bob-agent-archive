@@ -1,8 +1,8 @@
 # Bob — Current Stage（1.0.1 施工与交接合同）
 
-> 施工合同：现在做什么、下一项可派发工作是什么、验收标准是什么。修订：2026-10-28。
+> 施工合同：现在做什么、下一项可派发工作是什么、验收标准是什么。修订：2026-10-29。
 > **当前版本与分支：`1.0.1`**（`main` 与 `1.0.1` 同步演进；旧版 v0.9.30 已归档至 `legacy/v0.9` 分支）。
-> **当前里程碑：WP-03连接/威胁模型设计获批；BP2-01/02开始新写源码。轻量控制器6项测试通过；Windows离线内核9项测试通过（含独立进程强制中断恢复），Tauri接线、真实连接未验证。**
+> **当前里程碑：WP-03连接/威胁模型设计获批；BP2-01/02开始新写源码。前三项内核运行链路已实现，Windows离线34项通过；下一步Tauri/实际Provider接线，真实设备未验证。**
 
 ---
 
@@ -30,10 +30,10 @@
 | 顺序 | 工作包 ID | 任务名称 | 当前状态 | 交付物位置 |
 |---|---|---|---|---|
 | **Step 1** | **WP-01** | 前身项目深度只读盘点补全 | **静态盘点完成**（不含旧测试执行/全历史secret扫描） | `docs/evidence/2026-10-28-wp01-deep-inventory.md`、`docs/COMPONENT_MAP.md` |
-| **Step 2** | **WP-02** | `bob-kernel` 单一内核 Schema 与懒式预热 Outbox 状态机定案 | **设计与25项DDL约束通过**；内核实现已开始但未编译验证 | `docs/ARCHITECTURE.md`、`docs/wiki/kernel-schema.md` |
+| **Step 2** | **WP-02** | `bob-kernel` 单一内核 Schema 与懒式预热 Outbox 状态机定案 | **设计与25项DDL约束通过**；内核运行实现已有34项离线回归通过 | `docs/ARCHITECTURE.md`、`docs/wiki/kernel-schema.md` |
 | **Step 3** | **WP-03** | X1C Home ↔ Android 连接配置与安全威胁模型 | 设计已获批；实现安全验证待做 | `docs/wiki/connectivity.md`、`docs/wiki/threat-model.md`、`DECISIONS.md` |
-| **Step 4** | **BP2-01** | 建立 `1.0.1` 代码工程骨架（Rust Workspace + Tauri v2 + Vue 3） | 新写内核/控制器骨架进行中；构建待单独授权 | `Cargo.toml`、`crates/bob-kernel/`、`apps/bob-app/` |
-| **Step 5** | **BP2-02** | 实现 `BOB-D-008` 懒式响应、打字静默预热与本地 Durable Outbox 闭环 | 待 BP2-01 完成后执行 | `crates/bob-kernel/src/outbox/`、`src/work/` 契约测试 |
+| **Step 4** | **BP2-01** | 建立 `1.0.1` 代码工程骨架（Rust Workspace + Tauri v2 + Vue 3） | 内核编译已获批并通过；Vue/Tauri壳仍待接 | `Cargo.toml`、`crates/bob-kernel/`、`apps/bob-app/` |
+| **Step 5** | **BP2-02** | 实现 `BOB-D-008` 懒式响应、打字静默预热与本地 Durable Outbox 闭环 | 内核前三项通过；UI/真实连接尚未接通 | `crates/bob-kernel/src/outbox.rs`、`src/wake.rs`、`src/inbox.rs`、`src/dispatch.rs`（后三项相对crate） |
 
 ---
 
@@ -112,20 +112,29 @@
 - 进度投影经project_aligner的reviewed-patch生成：当前工具限定工作区内部路径，故在临时目录校验同一投影后按原文件hash比对写回本项目；不修改旧项目投影或全局注册表。
 - 回退：仅恢复本轮统一项目文档差异；没有旧仓库、数据库、凭据或生产变更要撤销。
 
-## 5 当前执行：WP-03获批，BP2-01/02源码实现
+## 5 当前执行：BP2前三项内核链路完成（2026-10-29）
 
-用户2026-10-28确认connectivity与threat-model两份文档并要求连续推进。BOB-D-006设计接受；BOB-D-007是否添加Drive只读镜像仍未决，不阻塞内核实现。用户随后批准离线内核编译测试及修复；未授权联网安装依赖、Tauri打包、现场密钥/网络操作或发布。
+授权来源：用户批准共享唤醒、Home持久接收、发送恢复调度前三项，并明确无需逐步确认；沿用已批准的离线编译测试范围。BOB-D-006设计已接受；BOB-D-007 Drive只读镜像仍未决，不阻塞本段。没有联网安装、真实设备/模型任务、Tauri打包或生产发布。
 
-- 新写Cargo workspace和bob-kernel：从本项目Schema提取迁移，持久SQLite Outbox、本地消息事务、请求身份冲突、发送模糊边界、Home回执与纯预热状态机。没有复制legacy业务源码。
-- 新写App发送控制器与6项Node内置测试：本地确认才清草稿、等待期间输入保护、重复点击合并、IPC不确定重试同ID。6/6通过，但bridge为测试替身，没有Tauri/Rust端到端。
-- 内核Rust离线编译成功，Windows适用9项测试通过；包含磁盘重开、锁竞争、独立子进程强制退出后的unknown恢复与禁止重派。Unix链接用例未运行；无真实网络/模型。源码与边界见[BP2 Evidence](evidence/2026-10-28-bp2-source.md)。
-- 当前只包含Rust workspace及App控制器；Vue/Tauri壳、IPC、真实异步共享等待、认证Provider、Home Inbox消费及control lane尚未实现。BP2-01/02保持进行中。
+| 本轮小目标 | 代码事实 | 验证边界 |
+|---|---|---|
+| 共享唤醒 | WakeCoordinator返回共享Future；后台认证/订阅adapter、旧代失效、自动闲置关闭、异步清理及容量保护 | 10项运行测试；adapter使用夹具，未验证真实认证网络 |
+| Home可靠接收 | 消息/领域事件/Inbox回执同事务；重复请求幂等；Home本机local消息提升；取消只记录stop_requested | 8项磁盘测试；错误身份/epoch/会话/撤销及事务回滚覆盖 |
+| 发送恢复调度 | claim→异步wake/transport→complete；每目标/lane单活动领取、控制优先、退避/预算、未知先查回执、迟到回调拒绝 | 7项调度测试含两份真实SQLite经fixture transport的丢ACK→重启→查回执；没有网络设备 |
 
-### 下一执行顺序与门槛
+完整回归34项通过，1项ignored为由父测试主动调用的子进程夹具；Unix专属链接检查未运行。详情与源码hash见[运行证据](evidence/2026-10-29-bp2-runtime.md)。原6项Node控制器测试前轮通过，本轮未改其源码。
 
-1. 已按授权完成`cargo test --offline --locked -p bob-kernel`，产物位于仓库外；新增Cargo.lock固定本次解析。9项通过，1项默认ignored为被父测试显式调用的子进程夹具，不计额外独立通过项。未运行Unix专属用例。
-2. 下一项接共享异步唤醒、Home接收事务和有界dispatcher；补控制消息不被未知普通发送堵塞的测试。
-3. 建立Vue/Tauri壳和IPC，接入同一内核。安装依赖与构建另按具体命令批准；UI必须展示本地保存/等待Home/已接收的真实区别。
-4. 接经授权的Provider和配对流程，再验证真实PC/手机；不把模拟bridge或设计威胁模型当作设备连通、安全或发送必达证明。
+### 下一执行项
 
-回退：撤回本轮新源码与文档提交即可；没有业务数据库迁移、legacy改动、凭据或生产变化。日常小步编码/轻量检查连续执行，重型操作集中授权。
+1. BP2-01/02继续：建立Vue/Tauri壳和IPC，把现有输入框控制器接同一内核；UI必须区分本地保存、等待Home、Home收到、停止请求与停止确认。不能因前三项内核通过就标BP2整体完成。
+2. 为真实Provider实现认证、watch generation写入防护、合作取消和有界I/O；注入HomeMessageContext前验证身份与会话授权。模拟公钥引用不是配对凭据。
+3. 获相应依赖安装/打包及现场接线授权后，验证PC→Android休眠、断网、重连、重启及重复点击。未运行Linux/Android、断电/磁盘故障或公网验收。
+
+### 保留限制
+
+- 查询不到回执不证明未执行：保持unknown_send，不自动重派；没有发明“安全重发”证明。
+- 控制lane本段落地cancel_execution；answer_permission及其他业务意图仍待各业务合同实现，未知kind不会被通用调度伪造处理。
+- Rust不能强杀不合作阻塞线程：未退出adapter与待清理watch继续占容量，清理失败拒绝新唤醒；不宣称底层已清理。
+- 配对、真实Home选址、实际传输协议、runner停止确认都不在本次已验证能力中。
+
+回退：恢复本轮代码/文档提交；未改变Schema 0001、生产数据、凭据或legacy仓库。依赖和Cargo.lock未增加。GitHub为本项目同步入口，未创建新的Drive平行计划。

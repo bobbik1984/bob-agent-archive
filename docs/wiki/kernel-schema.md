@@ -383,3 +383,9 @@ Runner IPC v1 最小信封：`protocol_version, request_id, execution_id, task_i
 按原 BP2 顺序：先 schema/typed command 与本地磁盘事务，再内存假传输的单飞/断点对账测试，最后实际 Connection Provider/Harness。不是另开路线。优先完成核心发送而非把全部旧模块一次搬入。治理移植量较大：20+旧Online表与严格状态门、旧App无Home权威复制，不能承诺直接复制即可上线；若第一条实际链路无法在单kernel边界闭合，再依据BOB-D-005请求评审回退方案，不自行改成双内核。
 
 本轮只有文档与内存DDL检查。设计回退用Git恢复本轮文档提交；真正迁移时须保留旧应用/旧库只读备份和逐条ID映射，不删旧版本。WP-03 连接/威胁模型未通过、迁入文件许可未批准或未获构建授权，不进入安装/打包/生产步骤。
+
+## BP2实现映射（2026-10-29）
+
+原DDL保持不变。运行时共享唤醒由wake.rs负责，prewarm.rs仅为纯状态参考模型；dispatcher不持SQLite事务跨await。claim持久标记边界，按(target,lane)独占活动领取；complete核对attempt以拒绝迟到回调。确认零字节可有界退避，配置错误归needs_attention；租约过期/传输超时保持unknown，lookup的Absent不是重发凭证。
+
+HomeMessageContext必须由已认证且有会话访问授权的adapter构造；内核另查paired/public_key_ref/epoch。消息、事件、Inbox回执同事务；cancel_execution只请求停止，不标停止确认、不释放租约。真实配对/网络协议和answer_permission等业务尚未实现。当前检查见CURRENT_STAGE及运行Evidence。
