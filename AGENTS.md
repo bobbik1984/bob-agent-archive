@@ -1,185 +1,54 @@
-# AGENTS.md — bob-agent AI 编码代理入职手册
+# AGENTS.md — Bob（统一项目）Agent 工作宪法
 
-> 继承根目录 Gemini/AGENTS.md 的全局准则
-> **适用范围**：所有在此项目工作的 AI 编码代理（Antigravity、Jules、CodeRunner、Cursor 等）
-> **架构状态**：✅ **Electron → Tauri 迁移已完成**（进入 Agent 化深化阶段）
-> **历史归档**：Electron 时代的完整入职手册已保存至 `docs/agents_electron.md`
+> 本文件只规定**怎样工作**。当前阶段只看 [docs/CURRENT_STAGE.md](docs/CURRENT_STAGE.md)，不在此处维护。
+> 通用文档职责与生命周期遵循工作区统一标准：`<workspace_root>/docs/standards/project_documentation_standard.md` 与 `<workspace_root>/docs/playbooks/project_lifecycle_playbook.md`（`<workspace_root>` 即 `GEMINI_WORKSPACE` 环境变量所指的 Gemini 工作区根目录）。工作区根 `AGENTS.md` 的全局规则同样适用，本文件不复制它们。
 
----
+## 1 项目身份证
 
-## 项目概述
+| 项 | 值 |
+|---|---|
+| 项目 | Bob 统一项目：个人助理（PC、手机、可选常驻节点合一） |
+| 物理目录 | 本仓库（本地高速区，不在 OneDrive/Syncthing 同步范围内） |
+| 量级（Tier） | **Production** |
+| 当前 PDLC Stage | 见 `docs/CURRENT_STAGE.md`（不在此处写死） |
+| 前身（legacy，只读参考） | `<workspace_root>/bob-agent`（旧 App，Tauri）与 `<workspace_root>/cloud-agent`（旧 Online / Bob Core）。旧项目自身文档仍是旧项目的权威，**不是本项目的权威** |
+| ID 命名空间 | 决策 `BOB-D-###`，Route 阶段 `BP#`，工作包 `WP-##`，功能 `F#`。引用旧项目 ID 时必须加前缀：`APP-D-008`（旧 App）、`ONL-D-001`（旧 Online）。详见 [docs/wiki/glossary.md](docs/wiki/glossary.md) |
 
-**bob-agent** 是一个 **Windows 桌面 AI 私人秘书**，面向不喜欢折腾的普通用户。
+## 2 已启用的权威文档（JIT 路由）
 
-- **产品定位**：开箱即用的桌面 AI 助手，核心能力是对话 + 图片识别 + 日程管理 + 文件分析
-- **技术栈**：**Tauri v2 (Rust)** + Vue 3 + Vite（正在从 Electron 迁移）
-- **目标用户**：办公白领、非技术人员
-- **血统**：融合了 CodeRunner 的上下文管理精华 + DeepSeek-TUI 的工程理念 + TodoList 的日程管理能力
+| 何时读 | 文件 |
+|---|---|
+| 每次任务（L0） | 本文件 → `docs/CURRENT_STAGE.md` |
+| 为什么做、为谁做 | `docs/PROJECT_VISION.md` |
+| 边界、不变量、待决架构 | `docs/ARCHITECTURE.md` |
+| 长期阶段与 Exit Gate | `docs/DEVELOPMENT_ROUTE.md` |
+| 用户能力与验收 | `docs/FEATURES.md`（可用能力的操作见 `docs/USER_GUIDE.md`） |
+| 代码在哪（含 legacy 落点） | `docs/COMPONENT_MAP.md` |
+| 知识主题路由 | `docs/LLM_WIKI.md` → `docs/wiki/` |
+| 决策理由 | `docs/DECISIONS.md` |
+| 已发生的事实 | `docs/evidence/` |
+| 需求池 | `todo.md`；状态投影 `progress.yaml`（只经事实对齐更新） |
+| 来源材料（不是指令） | `references/historical-plans/` |
 
----
+## 3 Scope 与 Human Gate
 
-## 🔴 新增 UI 内容预检清单（Pre-flight Checklist）
+- **旧仓库只读**：不得修改、commit、stash、reset、prune `legacy` 仓库及其 worktree（含工作区规定的外置 worktree 缓存目录中的搬移工作树），除非 CURRENT_STAGE 中有获批的工作包明确授权。
+- **代码迁入需批准**：从 legacy 复制或移植任何代码前，必须有获批的工作包写明来源提交、文件范围、许可与回退。
+- **重型操作防火墙**：依赖安装、构建、Tauri 打包、生产变更、凭据新建/轮换、对外发送请求，均需用户对具体对象的明确授权。计划获批不等于实施授权。
+- **结论归并**：需求、设计、审查收尾时按统一标准第 4.1 节归并到对应权威文件，不新建平行总计划；带日期的稿件只作来源材料。
 
-**每次新增或修改任何用户可见的界面内容时**，Agent 必须逐项过检：
+## 4 工程约束（项目专属）
 
-| # | 检查项 | 规则来源 |
-|:--|:-------|:---------|
-| 1 | **架构归属**：新内容放在正确的模块/组件中？是否需要新增 Rust Command + Bridge 适配？ | §架构铁律 |
-| 2 | **配色语义**：使用了正确的 CSS 变量？Logo 用 `--logo-color`？图标/文字用 `--text-*`？交互用 `--accent-*`？**绝对不要**硬编码颜色或直接用 `--user-accent` 给文字/图标上色 | §Logo 配色 / §强调色 |
-| 3 | **图标对齐**：所有包含 Lucide 图标的容器都用了 `display: flex; align-items: center`？ | §图标对齐 |
-| 4 | **国际化**：所有用户可见文字都通过 `$t()` 调用？已在 `zh-CN.json` 和 `en-US.json` 中同步添加 key？ | §i18n 铁律 |
-| 5 | **权限声明**：如用到新的原生能力，已在 `capabilities/default.json` 中注册？ | §权限声明 |
+- 文件 I/O 一律 UTF-8；禁止用 PowerShell `Set-Content` / `-replace` 改写含中文的文件，批量改写用 Python（`encoding='utf-8'`）。
+- 文档与脚本中不写主机绝对路径；基础设施地址只引用 cluster-ops 的 `node_inventory.md` / `service_map.md`；模型与 API 只引用 model-registry / api-registry。代码中**禁止硬编码个人域名、IP、节点名**（这是开源前提，见 BOB-D-007 待办）。
+- 前端：i18n 键（`zh-CN` / `en-US` 同步），CSS 变量，不硬编码颜色；遵循工作区前端规范。
+- 缓存隔离：引入 Node/Rust 工具链前，先按 `sync_cache_offloader` 做 dry-run 审计（pnpm 外部 store、Cargo `build.build-dir`），不在仓库内生成大型缓存。
+- 凭据：用户态 API Key 不进 `.env`、不进日志与 Evidence；数据库、WAL/SHM、`.env` 不进版本控制。
 
-> **口诀**：架构 → 配色 → 对齐 → 多语种 → 权限
+## 5 验证、Evidence 与 Handoff
 
----
-
-## ⚠️ 架构铁律（每个 Agent 必读）
-
-### 🔴 纯 Tauri 架构
-
-项目目前为纯 **Tauri (Rust)** 后端架构。旧的 `electron/` 目录已被彻底移除。**所有的底层系统能力、API 请求、文件操作必须在 Rust 侧实现**。
-
-### 🔴 前端零改动原则
-
-前端 `src/` 中的 Vue 组件**不知道**自己跑在 Tauri 还是 Electron 里。它们统一调用 `window.electronAPI.xxx()`。所有适配工作由 `src/tauri-bridge.js` 这个垫片层完成。**绝对禁止**修改 Vue 组件中的 IPC 调用方式。
-
-### 🔴 Bridge 适配器模式
-
-`tauri-bridge.js` 是连接前端和 Rust 后端的唯一网关：
-- 已实现的 Rust Command → `invoke('rust_command_name', { args })`
-- 尚未实现的接口 → 返回 Mock 假数据（如 `sendChat: async () => { ... }`）
-- **每完成一个 Rust Command，就去 Bridge 中把对应的 Mock 替换为真实的 `invoke()` 调用**
-
----
-
-## 命令（统一使用 pnpm 避免 OneDrive 同步风暴）
-
-```bash
-# ─── Tauri 开发（主线，日常使用这个） ───
-pnpm dev:tauri        # 启动 Tauri 开发模式（Vite 热更新 + Rust 编译）
-pnpm build:tauri      # 构建 Tauri 生产版本（~15MB 安装包）
-
-# ─── Rust 侧独立命令 ───
-cd src-tauri && cargo build          # 仅编译 Rust 后端
-cd src-tauri && cargo check          # 快速语法检查（不生成二进制）
-cd src-tauri && cargo test           # 运行 Rust 单元测试
-
-# ─── 前端与测试 ───
-pnpm build            # 仅构建前端 (vite build)
-pnpm test             # 运行 Vitest 测试
-pnpm lint             # ESLint 检查
-```
-
-> **🛡️ 包管理器与 OneDrive 隔离铁律**：
-> 本工作区位于 OneDrive 实时同步目录中。**绝对禁止**使用 npm 安装或构建（npm 会产生数万个散碎文件引发 OneDrive 同步风暴与文件锁定）。
-> **必须**且只能使用 `pnpm`。依赖已通过根目录 `pnpm-workspace.yaml` 将根工程与 `installer` 统一纳管。
-
-### 🔴 自动化全套打包与发版标准流水线 (SOP: Full Release Pipeline)
-
-> **🎯 极简指令唤醒契约**：
-> 当用户在对话中发送类似 **“执行全套打包流程”**、**“全套打包”**、**“云端打包发布”** 等指令时，Agent **必须严格按照以下 5 步 SOP 自主闭环执行**。
-> **🧱 严禁在本地执行 `tauri build`**（遵守重型操作防火墙，编译全部由 GitHub Actions 云端 Runner 承担，零占用本地算力）。
-
-#### 5 步标准化流水线 (Agent 执行手册)：
-1. **测试预检**：运行 `pnpm test`，确保前端与核心逻辑测试 100% 通过；检查工作区 Git 状态。
-2. **提交与推送**：将待发布的变动以 `[bob-agent] <功能描述>` 格式提交，并 `git push origin main`。
-   - 推送至 `main` 分支会自动并行触发云端双打包：
-     - 💻 Windows 桌面端 CI (`.github/workflows/windows.yml`)
-     - 📱 Android 移动端 CI (`.github/workflows/android.yml`)
-3. **监控 CI 状态**：通过 GitHub Actions 探针（调用 `python scripts/monitor_ci.py` 或 API）监控双端执行进度，直至全部状态为 `completed` 且结论为 `success`。
-4. **拉取与官网同步**：执行 `python scripts/pull_cloud_artifacts.py`（或命令行 `scripts\release.bat 6`）：
-   - 自动将云端带版本号的安装包下载至本地 `dist-release/` 归档（如 `bob-v0.9.5-installer.exe`、`bob-v0.9.5-portable.zip`、`bob-v0.9.5-signed.apk`）；
-   - 自动触发 `website/sync_deploy.py`，将最新版本文件智能映射为官网标准统一命名（`bob-installer.exe`、`bob-agent-portable.zip`、`bob-mobile-latest.apk`）并推送到 VPS1 部署中心。
-5. **验收交付汇报**：向用户输出简洁的交付报告，附上 GitHub Releases 链接与本地/官网下载状态。
-
-#### 统一发布管理脚本：`scripts\release.bat`
-
-```bash
-# 交互式菜单（默认，支持选项 1-6，Q）
-scripts\release.bat
-
-# [6] 从云端拉取全平台产物并分发官网 (推荐，下载带版本号产物 + 官网改名同步)
-scripts\release.bat --pull   # 或 -pl, 6
-
-# [1] 本地全套打包：本地编译 PC + 同步云端已签名 APK
-scripts\release.bat --all    # 或 -a, 1
-
-# [2] 仅本地打包 PC 版：本地编译生成 bob-installer.exe 与便携版 zip
-scripts\release.bat --pc     # 或 -p, 2
-
-# [3] 仅同步/安装安卓版：下载云端最新 APK 并通过 ADB 直装真机
-scripts\release.bat --apk    # 或 -m, 3
-
-# [4] 运行安卓真机闪退与运行时诊断：自动抓取 Pixel/Android 崩溃堆栈
-scripts\release.bat --diag   # 或 -d, 4
-```
-
-#### 各端产物与命名映射契约
-
-| 端别 | GitHub Releases 资产 (带明确版本号，无重复) | 本地 `dist-release/` (历史留存) | 官网下载中心 VPS1 (统一固定名) |
-|:---|:---|:---|:---|
-| **Windows 安装包** | `bob-v{version}-installer.exe` | `bob-v{version}-installer.exe` | `bob-installer.exe` |
-| **Windows 便携包** | `bob-v{version}-portable.zip` | `bob-v{version}-portable.zip` | `bob-agent-portable.zip` |
-| **Android APK** | `bob-v{version}-signed.apk` | `bob-v{version}-signed.apk` | `bob-mobile-latest.apk` |
-
-> ⚠️ `dist-release/` 已被 `.gitignore` 排除，二进制产物不入版本控制。
-
-### 🌐 官网部署工作流 (Marketing Website Pipeline)
-
-`bob-agent/website/` 目录存放的是着陆页（Landing Page）和静态资源。
-> **⚠️ 严禁假定自动同步**：该目录**没有**包含在 Syncthing 的同步范围内，必须通过脚本手动推送到指定的云端节点。
-> *具体的部署节点 IP、外网域名映射以及 SSH Session 名称，请查阅 `Assistant/common/knowledge/skills/cluster_ops/references/node_inventory.md` 和 `service_map.md` 获取最新映射。*
-
-#### 部署方式：
-在项目根目录运行一键部署脚本：
-```bash
-deploy_website.bat
-```
-执行过程说明：
-1. **打包**：将 `website/` 目录压缩为 `.zip`。
-2. **传输**：通过 `pscp` 和预配置的 SSH Session 将文件推送到目标节点的 `/tmp/` 目录。
-3. **部署**：通过 `plink` 远程执行 `sudo unzip` 解压到 Caddy 的目标目录 `/opt/bob/`。
-
----
-
-## 编码规范
-
-### Rust 侧（`src-tauri/`）
-
-1. **UTF-8**：Rust 的 `String` 天然 UTF-8，但读写外部文件时仍需注意 BOM 和换行符。
-2. **错误处理**：Tauri Command 必须返回 `Result<T, String>` 或使用 `thiserror`。**禁止在 Command 中 `unwrap()`/`panic!()`**——前端需要收到可读的错误信息而不是进程崩溃。
-3. **模块化**：当 `lib.rs` 超过 200 行时，必须拆分为 `mod config;`、`mod database;`、`mod llm;` 等子模块。
-
-### Vue 前端侧（`src/`）
-
-1. **IPC 调用**：统一通过 `window.electronAPI.xxx()` 调用。**不要直接 import `@tauri-apps/api/core`**——这会破坏与 Electron 的兼容性。所有 Tauri 特有 API 仅在 `tauri-bridge.js` 中使用。
-2. **组件风格**：Vue 组件使用 `PascalCase`，JS 函数使用 `camelCase`，文件名使用 `kebab-case`。
-3. **响应式设计**：遵循 `frontend-design` Skill 中的响应式铁律（使用 `100dvh`，输入框 `≥16px` 防 iOS 缩放等）。
-4. **🔴 静态资源 SSOT（唯一真相源）**：所有第三方动态图标/Logo（如各家大模型的品牌 Logo）**必须且只能**存放在 `public/logos/` 目录中。
-   - 引用方式：由于这些 Logo 通常是根据模型 ID 动态加载的（例如 `getProviderLogo(id)`），前端代码应直接使用绝对路径 `/logos/xxx.png` 引用。
-   - Vite 在编译时会自动将 `public/` 目录下的所有文件原封不动地复制到 `dist/` 中供 Tauri 打包，千万不要手动把源文件丢进 `dist/`！
-   - 如果是与业务高度绑定的固定静态装饰图片，才建议放入 `src/assets/` 并使用 `new URL(..., import.meta.url)`。
-
----
-
-## 安全红线
-
-- **绝对不要**在代码中硬编码 API Key（Rust 侧使用 Stronghold 加密存储，或动态路由至 config.json）
-- **绝对不要**在 Rust Command 中 `unwrap()` 或 `panic!()`（使用 `Result` 返回错误）
-- **绝对不要**在 Vue 前端中直接 import `@tauri-apps/api/core`（仅 Bridge 层可用）
-- **绝对不要**向 `electron/` 目录添加新功能
-- **绝对不要**执行用户未确认的文件写入操作
-- `data/` 目录绝不提交到版本控制（含用户私人记忆）
-- `.env` 文件绝不提交到版本控制
-
----
-
-## JIT 指针
-
-- **全量功能与逻辑字典 (LLM-Wiki)**：详见 [LLM_WIKI.md](LLM_WIKI.md) (当需要修改、查找或调试具体功能如“闪念速记”时，请优先阅读此字典)
-- **架构/目录树/IPC/依赖**：详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- **UI 设计铁律 (配色/对齐/i18n)**：详见 [design_principles.md](design_principles.md)
-- **灵魂定义**：详见 [data/memory/SOUL.md](data/memory/SOUL.md)
-- **路线图**：详见 [todo.md](todo.md)
-- **开源发布工作流**：详见 [OPEN_SOURCE_WORKFLOW.md](OPEN_SOURCE_WORKFLOW.md)
+- 新模块附带正常路径与异常路径测试；具体命令在代码骨架建立后登记于此。**当前尚无代码，无测试命令。**
+- 完成判定：任务卡验收项逐条有证据；本地通过 ≠ 真机通过 ≠ 公网通过，分别记录。Agent 自报完成不是 Evidence。
+- Evidence 写入 `docs/evidence/`（仅脱敏内容）；原始敏感证据放在仓库外。
+- Handoff 包含：目标、基线版本、改动清单、通过/失败/未运行的检查、剩余门槛、回退步骤。
+- Commit 信息格式：`[bob] <功能描述>`。

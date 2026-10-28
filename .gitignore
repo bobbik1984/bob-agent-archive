@@ -1,120 +1,31 @@
+# secrets & local config
+.env
+.env.*
+*.pem
+*.key
+
+# databases
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# build outputs & caches (caches should live outside the repo; see AGENTS.md)
+target/
+dist/
 node_modules/
 .pnp.*
-dist/
-out/
-.env
-*.exe
-*.msi
-*.db
-*.db-journal
-*.db-wal
-data/
-scratch/
-resources/llm-engine/
-*.gguf
-*.dll
-*.zip
+.vite/
+src-tauri/gen/**/build/
 
-dist-release/
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/extensions.json
+.idea/
 
-# Temporary test and utility directories
-keyring_test/
-references/
-temp_zip_extract/
-
-# AI Agent workspace guides and guidelines
-AGENTS.md
-
-# Security/Jules audit and review files
-*AUDIT_REPORT*.md
-out/
-.env
-*.exe
-*.msi
-*.db
-*.db-journal
-*.db-wal
-data/
-scratch/
-resources/llm-engine/
-*.gguf
-*.dll
-*.zip
-
-dist-release/
-
-# Temporary test and utility directories
-keyring_test/
-references/
-temp_zip_extract/
-
-# AI Agent workspace guides and guidelines
-AGENTS.md
-
-# Security/Jules audit and review files
-*AUDIT_REPORT*.md
-invoke_jules_*.py
-check_jules_*.py
-
-# Development progress logs
-progress.yaml
-
-# Temporary python & javascript debugging and scratch files
-check_*.py
-fix_*.py
-fix.py
-read_*.py
-test_*.js
-test_*.py
-test_*.rs
-test_*.html
-/patch*.py
-/patch*.js
-*.tmp
-*.log
-*.txt
-*.docx
-temp_build/
-debug/
-error/
-deploy/
-relay/
-test_ping/
-tests/
-!src-tauri/tests/
-!/tests/
-/tests/*
-!/tests/fixtures/
-/tests/fixtures/*
-!/tests/fixtures/remote-agent-preview.html
-!/tests/fixtures/remote-agent-preview-entry.js
-!/scripts/test_promote_candidate_release.py
-design_assets/
-web-drop/
-*.pdb
-Cargo_*.toml
-bob-relay.*
-bob-services.*
-old_sync.rs
-db_output.txt
-implementation_plan.md
-# Removed from tracking to shrink repo size
-/docs/*
-!/docs/REMOTE_HARNESS_INTEGRATION.md
-!/docs/evidence/
-!/docs/evidence/**
-!/docs/superpowers/
-/docs/superpowers/*
-!/docs/superpowers/plans/
-/docs/superpowers/plans/*
-!/docs/superpowers/plans/2026-09-22-track-a-security-and-client.md
-!/docs/superpowers/plans/2026-10-01-unified-version-candidate-build-plan.md
-/website/
-/references/
-/resources/
-*.bin
-*.b64
-tauri.conf.json.bak
-test_group.rs
-__pycache__/
-*.pyc
+# raw (non-sanitized) evidence never goes into docs/evidence
+private-evidence/
