@@ -4,7 +4,7 @@
 
 ## 待用户裁决
 
-- [ ] BOB-D-006 连接分层方案定案（L1 LAN → L2 P2P → L3 可替换 E2EE Relay → L4 云盘异步信箱 → L5 可选常开节点）
+- [x] BOB-D-006设计已获用户确认；真实安全/跨网验证仍待做
 - [ ] BOB-D-007 文档权威位置：是否需要在 Google Drive 放只读镜像供跨端 Bot 读取
 
 ## 核心待办队列（按里程碑）
@@ -12,13 +12,15 @@
 ### BP0 → BP1（架构与规格定案）
 - [x] **WP-01**：静态深度盘点完成，见 [Evidence](docs/evidence/2026-10-28-wp01-deep-inventory.md)；旧测试/现场数据库/全历史secret扫描未运行
 - [x] **WP-02**：Schema/预热Outbox设计草案完成，见 [kernel-schema](docs/wiki/kernel-schema.md)；25项内存DDL约束通过，尚未实现，BP1定案仍需WP-03
-- [ ] **WP-03**：完成 X1C Home ↔ Android 连接 Provider 配置规范与远程文件/Harness 威胁模型，输出 `docs/wiki/threat-model.md`
+- [x] **WP-03**：连接配置与威胁模型设计获批；不代表真实安全测试通过，BOB-D-007镜像选项仍待定
 
 ### BP2 → BP3（1.0.1 骨架与个人工作环境 MVP）
-- [ ] **BP2-01**：搭建 `1.0.1` Rust Workspace（`crates/bob-kernel`）+ Tauri v2（Desktop & Android）+ Vue 3 工程骨架
-- [ ] **BP2-02**：实现 `BOB-D-008` 懒式休眠、输入框 `@focus`/`@input` 静默预热、单飞 `inFlightWakeupPromise`、本地 `intent_outbox` 先落盘必达与 `not_dispatched` / `unknown_send` 分离对账
+- [/] **BP2-01**：搭建 `1.0.1` Rust Workspace（`crates/bob-kernel`）+ Tauri v2（Desktop & Android）+ Vue 3 工程骨架
+- [/] **BP2-02**：实现 `BOB-D-008` 懒式休眠、输入框 `@focus`/`@input` 静默预热、单飞 `inFlightWakeupPromise`、本地 `intent_outbox` 先落盘必达与 `not_dispatched` / `unknown_send` 分离对账
 - [ ] **BP3-01**：打通 X1C Home 主库 ↔ 手机 Tauri Android Replica 的会话、捕获、待办与远程文件只读浏览（F4）
 - [ ] **BP3-02**：通过进程边界接入 Harness Runner（DSH / AGY / Codex / Generic API），在统一 UI 中跑通 Task → Execution → Artifact 预览与 Review 闭环
+
+首段源码与6项模拟bridge检查见[BP2 Evidence](docs/evidence/2026-10-28-bp2-source.md)；Rust编译、Vue/Tauri壳与真实连接尚未完成。
 
 ## 前身项目需要修正（只记录，不在本仓库动手；需要时到对应项目执行）
 

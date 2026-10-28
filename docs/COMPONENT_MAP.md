@@ -1,6 +1,6 @@
 # Bob — Component Map
 
-> 把逻辑组件映射到真实代码。统一项目**尚无代码**；本页当前只记录前身项目中的落点和初步去留判断（retain、adapt、replace、merge、retire，均为 proposed，在 BP1 去留表获批后才生效）。
+> 把逻辑组件映射到真实代码。统一项目新源码见本页末段；前身落点仅供只读参考，去留判断（retain、adapt、replace、merge、retire，均为 proposed，在 BP1 去留表获批后才生效）。
 > 路径相对于 `<workspace_root>`。观察时间：2026-10-28，旧 App HEAD `a4ff5fd`，旧 Online HEAD `d14a527`，13个tracked修改、111个untracked项（只读采样）。详细表、状态、凭据及测试清单见[WP-01](evidence/2026-10-28-wp01-deep-inventory.md)。
 
 ## 1 统一项目（本仓库）
@@ -56,3 +56,9 @@
 - 必须适配：旧App的rpc_staged_outbox为接收配置暂存；write_mobile_outbox是JSON写命令；旧Online四条governed路径是AGY/Pi/DSH/Codex，Generic API仍是旧PTY路径。
 - 必须重写：Home/Replica同步、跨认证会话的持久请求回执、单飞预热与Outbox、统一领域写入入口。不能迁入磁盘失败退回内存或吞SQL错误的“成功”路径。
 - 代码迁入尚未获文件级批准；本表不是搬迁许可。统一项目没有运行时实现，Schema检查不替代产品验收。
+
+## 1.0.1 新写源码落点（2026-10-28）
+
+- `Cargo.toml`、`crates/bob-kernel/`：持久消息/Outbox、迁移、预热纯状态机；Rust测试尚未执行。
+- `apps/bob-app/src/send-controller.mjs`：输入框本地保存确认控制器；注入bridge，尚无Tauri/Provider接线。
+- `apps/bob-app/tests/send-controller.test.mjs`：6项本地模拟bridge测试，不证明真实内核IPC或网络。

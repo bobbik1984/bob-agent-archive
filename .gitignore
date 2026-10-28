@@ -29,3 +29,10 @@ desktop.ini
 
 # raw (non-sanitized) evidence never goes into docs/evidence
 private-evidence/
+
+# SQLite sidecars and ownership coordination
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.owner-lock

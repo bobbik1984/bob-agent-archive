@@ -2,7 +2,7 @@
 
 > 施工合同：现在做什么、下一项可派发工作是什么、验收标准是什么。修订：2026-10-28。
 > **当前版本与分支：`1.0.1`**（`main` 与 `1.0.1` 同步演进；旧版 v0.9.30 已归档至 `legacy/v0.9` 分支）。
-> **当前里程碑：WP-01静态盘点已完成，WP-02设计草案与DDL检查已完成；下一步WP-03。BP1尚未整体通过，BP2未开始。**
+> **当前里程碑：WP-03连接/威胁模型设计获批；BP2-01/02开始新写源码。轻量控制器6项测试通过，Rust编译、Tauri接线、真实连接未验证。**
 
 ---
 
@@ -30,9 +30,9 @@
 | 顺序 | 工作包 ID | 任务名称 | 当前状态 | 交付物位置 |
 |---|---|---|---|---|
 | **Step 1** | **WP-01** | 前身项目深度只读盘点补全 | **静态盘点完成**（不含旧测试执行/全历史secret扫描） | `docs/evidence/2026-10-28-wp01-deep-inventory.md`、`docs/COMPONENT_MAP.md` |
-| **Step 2** | **WP-02** | `bob-kernel` 单一内核 Schema 与懒式预热 Outbox 状态机定案 | **设计草案完成、25项DDL约束通过**；未实现 | `docs/ARCHITECTURE.md`、`docs/wiki/kernel-schema.md` |
-| **Step 3** | **WP-03** | X1C Home ↔ Android 连接配置与安全威胁模型 | **下一步**；连接/威胁模型仍待定案 | `docs/wiki/connectivity.md`、`docs/wiki/threat-model.md`、`DECISIONS.md` |
-| **Step 4** | **BP2-01** | 建立 `1.0.1` 代码工程骨架（Rust Workspace + Tauri v2 + Vue 3） | 待 BP1 文档定案且用户授权构建后执行 | `Cargo.toml`、`crates/bob-kernel/`、`apps/desktop-mobile/` |
+| **Step 2** | **WP-02** | `bob-kernel` 单一内核 Schema 与懒式预热 Outbox 状态机定案 | **设计与25项DDL约束通过**；内核实现已开始但未编译验证 | `docs/ARCHITECTURE.md`、`docs/wiki/kernel-schema.md` |
+| **Step 3** | **WP-03** | X1C Home ↔ Android 连接配置与安全威胁模型 | 设计已获批；实现安全验证待做 | `docs/wiki/connectivity.md`、`docs/wiki/threat-model.md`、`DECISIONS.md` |
+| **Step 4** | **BP2-01** | 建立 `1.0.1` 代码工程骨架（Rust Workspace + Tauri v2 + Vue 3） | 新写内核/控制器骨架进行中；构建待单独授权 | `Cargo.toml`、`crates/bob-kernel/`、`apps/bob-app/` |
 | **Step 5** | **BP2-02** | 实现 `BOB-D-008` 懒式响应、打字静默预热与本地 Durable Outbox 闭环 | 待 BP2-01 完成后执行 | `crates/bob-kernel/src/outbox/`、`src/work/` 契约测试 |
 
 ---
@@ -102,7 +102,7 @@
 - **允许**：只读查阅 `<workspace_root>/bob-agent`、`<workspace_root>/cloud-agent` 与 Google Drive 文档；在本仓库编写文档、设计 Schema，并在获得对应阶段授权后编写 `1.0.1` 代码与测试；向 `origin` 的 `1.0.1` 与 `main` 分支提交并推送。
 - **禁止**：修改前身仓库的业务代码（除非用户专门要求给 `legacy/v0.9` 打热补丁）；在代码中硬编码 `bobbik.org`、IP 或任何密钥；未经用户确认执行耗时的全量打包编译。
 
-## 4 本轮交接（2026-10-28，WP-01 / WP-02）
+## 4 历史交接（2026-10-28，WP-01 / WP-02；当前状态以第5节为准）
 
 - 基线：1.0.1/main=`d842924`，接手干净；旧App=`a4ff5fd`，旧Online=`d14a527`，保留所有既有改动。
 - WP-01：48个旧App静态表、20个Online业务表+3个认证表，含同步范围、状态门、Runner差异、凭据风险与测试/CI口径；检查并归并审计中的四处发送漏洞。
@@ -111,3 +111,21 @@
 - 下一项：原WP-03。BOB-D-006/007仍proposed，许可证/文件级代码迁入清单、连接威胁模型与构建授权未满足，Step4/5不启动。新项目文档按BOB-D-004通过GitHub同步；未擅自建立Drive新镜像。
 - 进度投影经project_aligner的reviewed-patch生成：当前工具限定工作区内部路径，故在临时目录校验同一投影后按原文件hash比对写回本项目；不修改旧项目投影或全局注册表。
 - 回退：仅恢复本轮统一项目文档差异；没有旧仓库、数据库、凭据或生产变更要撤销。
+
+## 5 当前执行：WP-03获批，BP2-01/02源码实现
+
+用户2026-10-28确认connectivity与threat-model两份文档并要求连续推进。BOB-D-006设计接受；BOB-D-007是否添加Drive只读镜像仍未决，不阻塞内核实现。未授权安装依赖、构建、现场密钥/网络操作或发布。
+
+- 新写Cargo workspace和bob-kernel：从本项目Schema提取迁移，持久SQLite Outbox、本地消息事务、请求身份冲突、发送模糊边界、Home回执与纯预热状态机。没有复制legacy业务源码。
+- 新写App发送控制器与6项Node内置测试：本地确认才清草稿、等待期间输入保护、重复点击合并、IPC不确定重试同ID。6/6通过，但bridge为测试替身，没有Tauri/Rust端到端。
+- 内核Rust测试已编写，尚未编译运行；磁盘持久性/进程锁/恢复和预热语义不能按源码直接标通过。源码与边界见[BP2 Evidence](evidence/2026-10-28-bp2-source.md)。
+- 当前只包含Rust workspace及App控制器；Vue/Tauri壳、IPC、真实异步共享等待、认证Provider、Home Inbox消费及control lane尚未实现。BP2-01/02保持进行中。
+
+### 下一执行顺序与门槛
+
+1. 获批后运行`cargo test --offline -p bob-kernel`；设置外置`CARGO_TARGET_DIR`与`CARGO_BUILD_BUILD_DIR`。只编译本内核及测试，不做release/Tauri打包、不联网补依赖。缺缓存时给出具体缺项，不自动下载。
+2. 修复测试暴露问题，再接共享异步唤醒、Home接收事务和有界dispatcher；补控制消息不被未知普通发送堵塞的测试。
+3. 建立Vue/Tauri壳和IPC，接入同一内核。安装依赖与构建另按具体命令批准；UI必须展示本地保存/等待Home/已接收的真实区别。
+4. 接经授权的Provider和配对流程，再验证真实PC/手机；不把模拟bridge或设计威胁模型当作设备连通、安全或发送必达证明。
+
+回退：撤回本轮新源码与文档提交即可；没有业务数据库迁移、legacy改动、凭据或生产变化。日常小步编码/轻量检查连续执行，重型操作集中授权。

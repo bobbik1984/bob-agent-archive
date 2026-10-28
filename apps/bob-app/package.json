@@ -1,0 +1,7 @@
+{
+  "name": "bob-app",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": { "test:composer": "node --test tests/send-controller.test.mjs" }
+}

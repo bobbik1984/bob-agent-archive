@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/bob-kernel"]
+resolver = "2"

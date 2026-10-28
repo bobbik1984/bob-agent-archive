@@ -2,7 +2,7 @@ project:
   name: bob-agent
   directory: bob-agent
   version: 1.0.1
-  status: planning
+  status: development
   tier: Production
   tech:
   - Rust
@@ -10,7 +10,7 @@ project:
   - Vue 3
   - Desktop
   - Android
-  current_task: 'WP-01静态盘点完成；WP-02 Schema与Outbox设计草案完成，25项内存DDL约束通过；下一步WP-03，BP1未整体通过，BP2/构建/发布未开始'
+  current_task: WP-03设计获批；BP2-01/02新写内核与输入控制器进行中，6项Node测试通过；Rust编译/IPC/真实连接未验证
   development_plan: docs/CURRENT_STAGE.md
 phases:
 - name: BP0 真相与保护
@@ -33,14 +33,14 @@ phases:
     status: done
   - text: WP-02 设计草案完成（31表、25项内存DDL约束；未实现，BP1待WP-03）
     status: done
-  - text: WP-03 连接定案、威胁模型与 BOB-D-006/007 裁决
-    status: todo
+  - text: WP-03连接与安全设计获批；真实安全验证未运行，D007镜像仍未决
+    status: done
 - name: BP2 骨架与契约
   tasks:
   - text: BP2-01 建立 1.0.1 Rust Workspace (bob-kernel) + Tauri v2 + Vue 3 骨架
-    status: todo
+    status: active
   - text: BP2-02 落地 BOB-D-008 懒式响应、输入框打字预热与本地 Durable Outbox 闭环及测试
-    status: todo
+    status: active
 - name: BP3 个人环境 MVP
   tasks:
   - text: BP3-01 X1C Home ↔ Android Replica 核心同步与远程文件只读浏览

@@ -1,3 +1,5 @@
+> 2026-10-28：本连接设计已获用户批准（BOB-D-006）；本文接口目标不代表Provider已实现或跨网络验证通过。
+
 # 跨设备连接：没有自己服务器的用户怎么用
 
 > 稳定知识页。相关决策：BOB-D-006（proposed）。最后核对：2026-10-28。外部事实标注了来源，引用前请重新核对。
@@ -31,10 +33,22 @@
 
 1. **作者个人环境（现在）**：L1，加上作者已有的自建中继和 Headscale（地址只从 cluster-ops `service_map.md` 读取），常开节点作为 L5。全部以 Connection Provider 配置的方式接入。
 2. **开源默认（BP6）**：L1 + L2 + L4 开箱即用；L3 默认关闭或使用社区中继，可以替换；L5 以文档和一键脚本提供。
-3. **始终诚实**：显示当前连接层级、对端是否在线；对端离线时只允许保存草稿或排队，并明确告诉用户“会在什么时候发出”；过期或已撤销的意图在恢复连接后不执行。
+3. **始终诚实**：显示当前连接层级、对端是否在线；对端离线时只允许保存草稿或排队，显示等待原因及最近尝试时间，不承诺无法证实的到达时间；过期或已撤销的意图在恢复连接后不执行。
 
 ## 5 待验证实验（属于 WP-03）
 
 - 在作者的真实网络组合（家庭 Wi-Fi、4G/5G、办公网、跨境）下测 L2 直连成功率和首包时延；
 - 云盘信箱：往返延迟、冲突文件、配额、离线行为；中国大陆选用 OneDrive 还是 WebDAV/坚果云；
 - 威胁模型：配对、设备吊销、重放、被盗手机、中继和云盘运营方可见的元数据。
+
+## 6 WP-03 Connection Provider契约草案
+
+2026-10-28：接口与安全要求设计完成，尚无运行实现或网络测量。安全准则见[threat-model](threat-model.md)，投递语义只在[kernel-schema](kernel-schema.md)维护。
+
+Connection Provider负责discover、connect/authenticate、send、lookup_receipt、subscribe(cursor)、close；返回结构化能力与错误，不裁决Task完成。send必须报告confirmed_zero、started_or_possible或durable_receipt，不能将笼统网络错误猜成未发送。协议不兼容与身份变化停止恢复，网络瞬断才退避重试。
+
+配置最小字段：schema_version、home_device_id、authority_epoch、provider_id、enabled、endpoint_ref、peer_identity_ref、credential_ref、allowed_workspace_refs、timeout_ms。私钥与Token仅在vault；地址由cluster-ops登记资料供用户选择后写入设备私有配置，不放源码、文档示例或Git。首次接线前重新核对service_map/node_inventory及现场服务身份，不能用历史文档证明当前可达。
+
+L1的mDNS只是发现，不能以“同一局域网”免除认证；L2与L3同样验证设备身份。L4承载相同加密意图与回执，不同步活动SQLite，上传完成不等于Home收到。L5是可选部署角色，不是第五种传输协议，也不自动接管Home。
+
+个人环境第一条实现建议为现有受控连接Provider＋本地Outbox，先完成一条Windows Home与Android Replica的真实链路。L2具体库和L4云盘接口尚未选定；本页早先关于供应商价格/公共服务限制的引用为历史研究，本轮未重新核实，不作为当前选型证据。开源默认组合继续等待BOB-D-006裁决。

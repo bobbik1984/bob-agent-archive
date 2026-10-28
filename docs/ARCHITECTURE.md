@@ -1,6 +1,6 @@
 # Bob — Architecture
 
-> 本文记录**已接受的边界与不变量**和**待决的架构候选**，两者分节标明。代码位置见 [COMPONENT_MAP](COMPONENT_MAP.md)，决策理由见 [DECISIONS](DECISIONS.md)。截至 2026-10-28，统一项目还没有代码，以下内容都不代表已实现的能力。WP-02 的详细 Schema、事务与预热/Outbox 草案见 [wiki/kernel-schema.md](wiki/kernel-schema.md)；本轮仅完成静态盘点与DDL约束校验。
+> 本文记录**已接受的边界与不变量**和**待决的架构候选**，两者分节标明。代码位置见 [COMPONENT_MAP](COMPONENT_MAP.md)，决策理由见 [DECISIONS](DECISIONS.md)。截至 2026-10-28，已开始新写内核与App控制器；完整功能仍未接通。WP-02详细合同见 [wiki/kernel-schema.md](wiki/kernel-schema.md)，当前验证范围以CURRENT_STAGE和Evidence为准。
 
 ## 1 已接受的不变量
 
@@ -58,7 +58,7 @@
 | 问题 | 决策 | 前置工作 |
 |---|---|---|
 | 内核语义对齐（同名实体、迁移边界） | BOB-D-005已接受；[WP-02草案](wiki/kernel-schema.md)已形成并经DDL检查，尚非实现 | WP-03审阅与BP2契约测试 |
-| 连接分层与默认方案 | BOB-D-006（proposed） | WP-03 |
+| 连接分层与默认方案 | BOB-D-006设计已接受 | 实现与跨网安全验证待做 |
 | 旧App同步去留 | WP-01已证明为双向合并；提取协议/测试，Home权威同步需重写，禁止整文件照搬 | BP1去留审阅及迁入批准 |
 | UI 收敛：直接演进旧 App UI，还是另起 UI 包 | 待开题（审查 AD-4） | WP-02 |
 | 旧 App 微信网关等模块是否进入开源核心 | 待开题 | BP6 前 |
@@ -66,3 +66,7 @@
 ## 5 安全边界（必过门）
 
 手机远程读取 PC 文件（F4）、Harness 在个人电脑上执行，是攻击面最大的两条路径。上线前必须完成 WP-03 威胁模型：设备配对与吊销、操作授权范围、默认拒绝的执行环境、重放防护、日志脱敏，以及丢失手机时的处置。
+
+## 实现边界补充（2026-10-28）
+
+连接/安全设计见已批准的[connectivity](wiki/connectivity.md)与[threat-model](wiki/threat-model.md)。首段源码仅实现kernel本地Outbox和App发送控制器；UI不自建网络重试状态机。预热是独立后台动作，不成为本地保存的前置条件。真实Home认证、持久Inbox消费和异步dispatcher尚未接通，不能把本地保存提升为对端已采用或模型已运行。
