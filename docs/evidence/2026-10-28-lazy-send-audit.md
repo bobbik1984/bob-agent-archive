@@ -62,8 +62,10 @@
 1. **本地落盘即发送成功（Local-First Durable Outbox）**：
    - 用户点击发送的唯一同步前置条件是**写入本机 SQLite `intent_outbox` 成功**（生成 `request_id` 与幂等键，状态 `local_saved` → `queued_for_wakeup`）。
    - 写入本机成功后，输入框立即清空、消息立即上屏（显示状态徽标：`已入队 · 正在唤醒连接` 或 `等待 X1C 上线投递`），**永远不因网络处于非即时模式而让发送动作失败**。
-2. **单飞唤醒等待与新 `watchId` 强绑定（Single-Flight Wakeup Await）**：
-   - 若点击发送时已有 `connecting` 在途，发送管线挂起等待该次连接及 `session/watch` 完成，拿到新连接的 `watchId` 后自动出队投递；若首次唤醒失败，后台按退避策略或网络恢复事件自动重试出队，无需用户重新点击发送。
+2. **输入框聚焦/打字静默预热（Speculative Pre-Warm）+ 单飞唤醒等待（Single-Flight Wakeup Await）**：
+   - **打字时间差预热**：用户点击输入框（`@focus`）或输入首字（`@input`，带冷却节流）时，若链路处于 `linkDormant` 或距上次存活确认超过阈值，后台静默发起预热建连与 `session/watch` 刷新（不设 `busy`、不弹错误、保留当前视图）。用户通常需要 3～15 秒打字，而隧道唤醒仅需 0.5～2 秒，打完字点击发送时连接已就绪，体验与常驻长连接完全一致。
+   - **单飞 Promise 复用**：预热与发送共享同一个 `inFlightWakeupPromise`。若用户秒点发送而预热仍在握手，发送管线直接 `await` 该在途 Promise，拿到新连接的 `watchId` 后立即投递；若预热后用户放弃输入未发送，空闲超时后自动回落 `linkDormant`。
+   - **Outbox 退避兜底**：若因极端网络切换导致首次唤醒未赶上，消息已在 `intent_outbox` 中排队，后台自动退避重试出队，无需用户重发。
 3. **严格区分 `not_dispatched`（未出网）与 `unknown_send`（已出网未确认）**：
    - 凡是在本地连接检查（`!alive`）、唤醒建连、HTTP 建连阶段失败（请求体尚未写入 socket），一律标记为 `not_dispatched`，保留在 `intent_outbox` 中自动重连重发，**严禁打入 `REMOTE_OUTCOME_UNKNOWN` 锁死会话**。
    - 只有请求字节已发出、等待响应中途断连，才标记为 `unknown_send`；重连后先按 `request_id` 自动对账，对端未收到则自动补发，对端已收到则直接绑定执行流。

@@ -97,7 +97,10 @@
 - **背景与审计证据**：见 [evidence/2026-10-28-lazy-send-audit.md](evidence/2026-10-28-lazy-send-audit.md)。`legacy/v0.9`（提交 `a4ff5fd`）虽在 Work 面板引入了 `linkDormant` 懒式休眠同步，但仍存在 4 条会导致非即时模式下发送失败的漏洞（底层 Socket 刚断未进休眠时发送未出网即被误标为 `REMOTE_OUTCOME_UNKNOWN`、`connecting` 竞态跳过唤醒、唤醒重连后旧 `watchId` 触发 `REMOTE_STALE`、以及 Chat `@pc` 模式离线弹窗拒发）。
 - **决定**：`1.0.1` 统一内核全面采用**懒式响应（Lazy Dormant Connection）+ 本地持久化发件箱（Local-First Durable Outbox）**架构，并强制执行以下四条不变式：
   1. **本地落盘即发送成功（Local-First Durable Outbox Acceptance）**：无论当前链路处于懒式休眠（`linkDormant`）、唤醒重连中（`connecting`）、L4 云盘信箱模式，还是 X1C Home 睡眠/暂不可达，用户点击“发送”时，只要消息写入本机 SQLite `intent_outbox`（带全局唯一 `request_id` 与幂等键，初始状态 `local_saved` → `queued_for_wakeup`）成功，UI 必须立即接纳消息上屏并清空输入框，**绝对禁止因为非即时连接状态而让发送动作失败或阻塞用户**。
-  2. **单飞唤醒等待与新 `watchId` 强绑定（Single-Flight Wakeup & Watch Rebind）**：Outbox 投递器触发按需唤醒（Wakeup-on-Send）时，若已有 `connecting` 任务在途，必须挂起等待（await）该连接及 `session/watch` 握手完成、拿到新连接的 `watchId` 后再出队发送，杜绝因 `connecting == true` 跳过唤醒或使用旧 `watchId` 触发 `REMOTE_STALE`。
+  2. **输入框聚焦/打字静默预热（Speculative Pre-Warm on Focus/Typing）+ 单飞唤醒复用（Single-Flight Wakeup Await）**：
+     - **打字即预热**：当用户点击输入框（`@focus`）或开始输入第一个字符（`@input`，带 15 秒节流冷却）时，若当前处于 `linkDormant`、连接未就绪或距上次心跳超过阈值，后台**静默启动预热探针与重连（Pre-Warm）**（`preserveView: true`，不置 `busy`、不闪报错条、不打断打字）。利用用户打字的 3～15 秒时间差提前完成隧道建连与 `session/watch` 握手，实现“打完字点发送即刻秒发”的无感体验。
+     - **单飞 Promise 共享**：预热与发送共用同一个 `inFlightWakeupPromise`。若用户打字极快、点发送时预热握手尚未结束，`send()` 直接 `await` 该在途 Promise 并在拿到新 `watchId` 后立即投递，既不重复建连，也不会因 `connecting == true` 跳过唤醒或误用旧 `watchId` 触发 `REMOTE_STALE`。
+     - **未发自动回眠**：若用户仅聚焦输入框但最终未发送消息，预热连接在空闲超时后自动回落至 `linkDormant` 休眠态。
   3. **严格区分 `not_dispatched`（未出网）与 `unknown_send`（已出网未确认）**：
      - 凡是在本地连接状态检查（`!alive`）、唤醒重连或 HTTP/QUIC 建连阶段失败（请求字节尚未写入网络流），一律归类为 **`not_dispatched`**，保留在 `intent_outbox` 中等待通道就绪后自动重发，**严禁打入 `REMOTE_OUTCOME_UNKNOWN` 锁死会话**。
      - 仅当请求字节已写入传输层、在等待 ACK 期间连接中断时，才标为 **`unknown_send`**；重连后由内核先携带同一 `request_id` 自动向对端查询幂等回执对账，未执行则自动补发，已执行则直接绑定结果流。

@@ -15,7 +15,7 @@
 7. **Requested / Resolved / Observed**：模型和运行配置分开记录；没有观测证据就是 `unknown`。
 8. **三个信任域分离**：设备配对、操作授权、Provider 认证相互独立。配对成功不等于可以写文件，有模型 Key 不等于批准执行。
 9. **凭据留在边缘**：凭据存放在设备的系统安全存储（Windows DPAPI、Android Keystore）或执行主机本地；不同步、不进日志、不进成果、不进上下文包。
-10. **懒式响应与发送必达（BOB-D-008）**：连接默认采用懒式响应（空闲静止会话允许底层隧道休眠 `linkDormant`，按需唤醒，不刷重连风暴）。发送状态严格分层：`local_saved`（本机已落盘 Outbox，**此时 UI 发送动作即宣告成功**）→ `queued_for_wakeup`（等待唤醒/通道就绪）→ `dispatched`（已写入传输层）→ `peer_accepted`（对方已接收）→ `running` → `pending_verification` / `unknown_send`。**未写入网络流的本地/建连失败一律归为 `not_dispatched` 自动重连重发，严禁因为处于非即时模式而让用户发送失败，也严禁将未出网的请求误判为 `unknown_send` 锁死会话**；真正的 `unknown_send` 重连后必须先按 `request_id` 对账再决定补发或拉取结果。
+10. **懒式响应、打字预热与发送必达（BOB-D-008）**：连接默认采用懒式响应（空闲静止会话允许底层隧道休眠 `linkDormant`，不刷重连风暴）；当用户聚焦输入框（`@focus`）或开始打字（`@input`）时，后台静默触发预热重连（Pre-Warm），利用打字时间差提前完成握手并共享单飞 `inFlightWakeupPromise`。发送状态严格分层：`local_saved`（本机已落盘 Outbox，**此时 UI 发送动作即宣告成功**）→ `queued_for_wakeup`（等待预热/唤醒就绪）→ `dispatched`（已写入传输层）→ `peer_accepted`（对方已接收）→ `running` → `pending_verification` / `unknown_send`。**未写入网络流的本地/建连失败一律归为 `not_dispatched` 自动重连重发，严禁因为处于非即时模式而让用户发送失败，也严禁将未出网的请求误判为 `unknown_send` 锁死会话**；真正的 `unknown_send` 重连后必须先按 `request_id` 对账再决定补发或拉取结果。
 11. **原始证据不被覆盖**：摘要、检索、纠正都不能覆盖原始捕获和证据。
 12. **个人基础设施不进代码**：域名、IP、节点只能经配置或 Provider 注入（BOB-D-004）。
 
