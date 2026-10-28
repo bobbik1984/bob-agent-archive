@@ -5,9 +5,10 @@
 
 ## 1 当前事实
 
-- 统一项目目录已建立，包含 Production 级文档骨架（2026-10-28），已初始化本地 Git 仓库，并在工作区 `project_registry.yaml` 中登记为 `bob_agent`（`bob-agent`）。**尚无业务代码，GitHub 远端尚未配置（见 WP-04 剩余项）。**
+- 统一项目 `bob-agent` 版本基线定为 **`1.0.1`**（包含 Production 级文档骨架，2026-10-28），并在工作区 `project_registry.yaml` 中登记为 `bob_agent`（`bob-agent`）。前身单机版历史（`a4ff5fd`，v0.9.30）已归入 `legacy/v0.9` 分支，新主线从 `1.0.1` 分支推进开发。
 - **WP-00 前身项目保护基线已完成并验证**：备份位于对应旧仓库的 `.backup/2026-10-28/`（已加入 `.git/info/exclude`），校验结果见 [evidence/2026-10-28-wp00-backup.md](evidence/2026-10-28-wp00-backup.md)。前身项目盘点见 [evidence/2026-10-28-legacy-inventory.md](evidence/2026-10-28-legacy-inventory.md)。
-- **已接受的决策**：BOB-D-001（新目录）、BOB-D-002（白领与普通开发者，单用户多设备）、BOB-D-003（Tauri Android，iOS 后期）、BOB-D-004（个人环境优先，**主库 Home 在 X1C**，代码走 GitHub 同步）、**BOB-D-005（单一 Rust 内核，多种部署形态）**。
+- **懒式响应与非即时发送可靠性审计已完成**：见 [evidence/2026-10-28-lazy-send-audit.md](evidence/2026-10-28-lazy-send-audit.md) 与 **BOB-D-008**（强制本地 Outbox 先落盘即成功、单飞唤醒等待、严格区分 `not_dispatched` 与 `unknown_send`）。
+- **已接受的决策**：BOB-D-001（新目录、`legacy/v0.9` 归档、`1.0.1` 起步）、BOB-D-002（白领与普通开发者，单用户多设备）、BOB-D-003（Tauri Android，iOS 后期）、BOB-D-004（个人环境优先，**主库 Home 在 X1C**，代码走 GitHub 同步）、**BOB-D-005（单一 Rust 内核，多种部署形态）**、**BOB-D-008（懒式响应与非即时模式下发送必不失败铁律）**。
 - **待裁决**：BOB-D-006（连接分层方案）、BOB-D-007（文档位置与 Drive 镜像）。
 
 ## 2 工作包

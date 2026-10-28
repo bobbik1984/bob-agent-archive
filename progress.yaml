@@ -1,7 +1,7 @@
 project:
   name: bob-agent
   directory: bob-agent
-  version: 0.0.0
+  version: 1.0.1
   status: planning
   tier: Production
   tech:
@@ -10,7 +10,7 @@ project:
   - Vue 3
   - Desktop
   - Android
-  current_task: 'BP0→BP1：WP-00 保护基线与 BOB-D-005（单一 Rust 内核、X1C 主库）已完成；下一步执行 WP-01 盘点补全与 WP-02 内核语义对齐'
+  current_task: '1.0.1 (BP0→BP1)：旧版已归档至 legacy/v0.9，BOB-D-008（懒式响应与非即时发送必达契约）已确认；下一步推进 WP-01/WP-02 内核与 Outbox 状态机设计'
   development_plan: docs/CURRENT_STAGE.md
 phases:
 - name: BP0 真相与保护

@@ -1,8 +1,8 @@
-# Bob（统一项目）
+# bob-agent (v1.0.1)
 
 属于你自己的个人助理：电脑和手机上都能用，事情做了一半可以接着做，成果和决定找得回来，模型和工具随时可以换。
 
-> **状态：规划阶段（BP0 → BP1），还没有可运行的代码。** 目前在用的旧版本请见前身项目：旧 App（Tauri，0.9.x）和旧 Online（部署在 Hostinger）。
+> **状态：`1.0.1` 架构与规划阶段（BP0 → BP1）。** 原 0.9.x 单机版代码已归档至 `legacy/v0.9` 分支；旧 Online 仍部署在 Hostinger，待 `1.0.1` 统一内核验收后平滑接管。
 
 - 为什么、为谁：[docs/PROJECT_VISION.md](docs/PROJECT_VISION.md)
 - 现在在做什么：[docs/CURRENT_STAGE.md](docs/CURRENT_STAGE.md)

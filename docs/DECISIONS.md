@@ -5,13 +5,15 @@
 
 ---
 
-## BOB-D-001 — 统一项目在新目录重新组织，前身项目冻结为只读参考
+## BOB-D-001 — 统一项目在新目录重新组织，前身项目归档为 `legacy/v0.9`，新主线从 `1.0.1` 起步
 
 - 日期：2026-10-28　状态：**accepted**（用户确认）
-- **决定**：统一后的 Bob 在独立的新开发目录（本仓库，位于工作区规定的本地高速区）中建设。前身 `bob-agent`（旧 App）和 `cloud-agent`（旧 Online）保留原位，作为只读参考和资产来源，**不搬目录、不改写历史**。
-- **理由**：避免在正有大量未提交改动的旧仓库里做结构手术；新目录不在 OneDrive 同步范围内，可以规避同步风暴。
+- **决定**：
+  1. 统一后的 `bob-agent` 在独立的新开发目录（本仓库，位于工作区规定的本地高速区）中建设。
+  2. 前身 `bob-agent`（旧单机 App，v0.9.30，提交 `a4ff5fd`）的完整 Git 历史拉入本仓库并归档至 **`legacy/v0.9` 分支**推送到 GitHub；前身原目录与 `cloud-agent`（旧 Online）保留原位作为只读参考和资产来源。
+  3. 统一后的新一代 `bob-agent` 版本号从 **`1.0.1`** 起步推进开发（建立 **`1.0.1` 分支**与快进演进的 `main` 分支）。
+- **理由**：避免在正有大量未提交改动的旧仓库里做结构手术；新目录不在 OneDrive 同步范围内，可以规避同步风暴；通过将旧历史归入 `legacy/v0.9` 分支并在其上快进开启 `1.0.1`，实现 GitHub 同名仓库 `bobbik1984/bob-agent` 的零冲突、不断代演进。
 - **约束**：从旧仓库迁入代码、数据或文档必须走获批的工作包。旧产品（App 0.9.30、Hostinger 上的 Online）在新内核对应能力通过验收前继续服务。
-- **代价与风险**：新目录不随 Syncthing/OneDrive 同步 → 必须尽快建立 Git 远端备份（WP-04）。新旧目录同名（`bob-agent`），一律用“统一项目”和“旧 App”区分。
 
 ## BOB-D-002 — 目标用户：白领与普通开发者，单用户多设备
 
@@ -86,3 +88,17 @@
 - 日期：2026-10-28　状态：**proposed**
 - **决定（草案）**：统一项目的权威文档在本仓库 `docs/`。Drive `bob-online/docs` 和旧 App `docs/` 继续作为前身项目的权威和历史，不再承接统一项目的新结论。ID 加命名空间前缀（见 [wiki/glossary.md](wiki/glossary.md)）。
 - **待定**：是否需要在 Drive 放一份只读镜像，方便手机端 Bot 和云端 Agent 读取。
+
+---
+
+## BOB-D-008 — 懒式响应（Lazy Response）与非即时模式下“发送必不失败”铁律
+
+- 日期：2026-10-28　状态：**accepted**（用户确认）
+- **背景与审计证据**：见 [evidence/2026-10-28-lazy-send-audit.md](evidence/2026-10-28-lazy-send-audit.md)。`legacy/v0.9`（提交 `a4ff5fd`）虽在 Work 面板引入了 `linkDormant` 懒式休眠同步，但仍存在 4 条会导致非即时模式下发送失败的漏洞（底层 Socket 刚断未进休眠时发送未出网即被误标为 `REMOTE_OUTCOME_UNKNOWN`、`connecting` 竞态跳过唤醒、唤醒重连后旧 `watchId` 触发 `REMOTE_STALE`、以及 Chat `@pc` 模式离线弹窗拒发）。
+- **决定**：`1.0.1` 统一内核全面采用**懒式响应（Lazy Dormant Connection）+ 本地持久化发件箱（Local-First Durable Outbox）**架构，并强制执行以下四条不变式：
+  1. **本地落盘即发送成功（Local-First Durable Outbox Acceptance）**：无论当前链路处于懒式休眠（`linkDormant`）、唤醒重连中（`connecting`）、L4 云盘信箱模式，还是 X1C Home 睡眠/暂不可达，用户点击“发送”时，只要消息写入本机 SQLite `intent_outbox`（带全局唯一 `request_id` 与幂等键，初始状态 `local_saved` → `queued_for_wakeup`）成功，UI 必须立即接纳消息上屏并清空输入框，**绝对禁止因为非即时连接状态而让发送动作失败或阻塞用户**。
+  2. **单飞唤醒等待与新 `watchId` 强绑定（Single-Flight Wakeup & Watch Rebind）**：Outbox 投递器触发按需唤醒（Wakeup-on-Send）时，若已有 `connecting` 任务在途，必须挂起等待（await）该连接及 `session/watch` 握手完成、拿到新连接的 `watchId` 后再出队发送，杜绝因 `connecting == true` 跳过唤醒或使用旧 `watchId` 触发 `REMOTE_STALE`。
+  3. **严格区分 `not_dispatched`（未出网）与 `unknown_send`（已出网未确认）**：
+     - 凡是在本地连接状态检查（`!alive`）、唤醒重连或 HTTP/QUIC 建连阶段失败（请求字节尚未写入网络流），一律归类为 **`not_dispatched`**，保留在 `intent_outbox` 中等待通道就绪后自动重发，**严禁打入 `REMOTE_OUTCOME_UNKNOWN` 锁死会话**。
+     - 仅当请求字节已写入传输层、在等待 ACK 期间连接中断时，才标为 **`unknown_send`**；重连后由内核先携带同一 `request_id` 自动向对端查询幂等回执对账，未执行则自动补发，已执行则直接绑定结果流。
+  4. **空会话一致休眠**：无论会话是否已有历史消息（含 `messages.length === 0` 的新建会话），只要处于静止阶段且无待确认交互，空闲断连一律平滑进入 `linkDormant` 懒式休眠。
