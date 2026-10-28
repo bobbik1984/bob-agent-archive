@@ -34,14 +34,8 @@ try {
     await page.locator('.remote-settings form button').click();
     await page.locator('.remote-settings [role=status]').waitFor();
     await page.locator('[data-nav=work]').click();
-    // Exercise the real WorkView wrapper, not just the remote panel in isolation.
-    await page.locator('.work-records > summary').click();
-    await page.getByText('Existing local project', { exact: true }).waitFor();
-    await page.locator('.work-records > summary').click();
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent('today-brief-action', { detail: { action: { targetId: 'goal1', payload: { projectId: 'local1' } } } })));
-    await page.getByText('Existing local goal', { exact: true }).waitFor();
-    assert.equal(await page.locator('.work-records').evaluate(el => el.open), true);
-    await page.locator('.work-records > summary').click();
+    // HEAD 2598428 intentionally removed legacy records from Work. Exercise its actual remote view.
+    await page.locator('.work-view .remote-panel').waitFor();
     assert.equal(await page.locator('.remote-panel input[type=password]').count(), 0);
     await page.getByRole('button', { name: '建筑模型渲染 · 示例' }).click();
     await page.locator('.remote-message').last().waitFor();

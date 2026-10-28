@@ -42,3 +42,20 @@ RH-00/RH-01 **部分实现/本地验证**。未验证实际 X1T 版本、认证�
 下一步按规格第 8 节：不以真实端点凭据为本地开发前提；接入 `$events` ready、问答/审批、prompt 幂等与真实任务状态后再开放发送。2026-10-22 用户授权先冻结 0.9.28 并进行 GitHub 双端候选构建，构建结果单独记录，不由本报告推断；A4/A5 历史门禁不因本轮测试自动通过。
 
 Online Agent 仅只读查阅本地 current-stage 指向的运行器源码，未验证其登录后线上行为，也未修改其服务、数据或 X1T 现场配置。
+
+<a id="core-read-local"></a>
+## 2026-10-27 Core只读联合增量（本地，未发布）
+
+上文保留0.9.28历史范围。本段对应Bob `2598428`、Online `97e3480` 加当轮未提交修改；提交号不是完整候选制品身份。Core只读API和App适配已本地实现，不代表生产端或已安装App可用。关联[当前共同契约](../../../../cloud-agent/docs/CURRENT_STAGE.md#core-client-contract-v1)。
+
+| 检查 | 当轮结果 | 验证边界 |
+|---|---|---|
+| `scripts/test-remote-agent-native.py` | 27/27通过 | 实际Rust模块、真实本地Core HTTP与Windows DPAPI；测试适配移除Tauri命令宏/AppHandle调度，非完整Tauri构建或安装包 |
+| `pnpm --config.verify-deps-before-run=false run test` | 17文件/120项通过 | 复用既有依赖的前端测试，不替代远端节点验证 |
+| `scripts/test-core-client-ui.mjs` 与 `scripts/test-remote-agent-ui.mjs` | 两尺寸通过 | 实际Vue，390中文暗色、1280英文亮色，Core及DSH显示/交互；原生Bridge模拟，不能证明浏览器到真实原生进程全链 |
+
+截图：[390窄屏](core-read-mobile.png)、[1280桌面](core-read-desktop.png)，均为夹具测试数据，不是真实项目效果。本次文档收尾确认两文件存在；测试计数来自本轮执行记录，未在收尾阶段重跑，未将完整原始测试stdout归档到本目录。可复现入口仍为上述仓库脚本，原生脚本使用本地Core夹具地址/编译后的夹具，不使用生产凭据。
+
+收尾时只读核对HEAD：Bob `259842882989328a11d76a5d7a9773ed94ad9705`，Online `97e3480dbed137a1c94bbcd87a33b4b60303d300`。各仓库`git diff HEAD --no-ext-diff -- src src-tauri packages scripts`输出SHA-256分别为`60f94ddebdad3cd417ea22c4d977315cc8cbd9724a0f46e7a3a4605d8bc308c2`、`85531666bfcb206eaa5428797d641ea65143abc63efa357a8526cda7caeaff22`。仅定位收尾时已跟踪源码差异，不含未跟踪文件，不证明测试时所有文件相同，不是完整冻结候选或发布哈希。
+
+Core读取覆盖授权项目、持久消息分页与Task事实快照；写入、批准及成果正文能力仍关闭。24小时只读授权是过渡实现，不能替代既有长期设备密钥＋轮换refresh规范。完整Tauri/AppHandle、Android系统认证、真实节点/公网、长期身份及真实持续修改尚未验收。没有模型调用、Blender或发布。

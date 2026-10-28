@@ -1,5 +1,12 @@
 # Bob 当前开发清单
 
+## 远端持续开发联合规划入口
+
+- [x] RH-00/01：Core合同及本地只读Adapter、typed vault、网页批准/撤销、项目/分页历史/Task事实投影已实现；27项原生、120项前端、Core/DSH双尺寸浏览器通过。不是完整Tauri或真机验收，见[原生证据](docs/evidence/remote-agent/RH-01-native-read-preview.md#core-read-local)。
+- [ ] 按既有长期设备身份规范补device key/refresh/可信设备介绍；24h只读凭据为过渡。浏览器授权与原App输密码方向的差异需生产准入确认。
+- [ ] RH-01/02下一准入：完整原生包及Android真机、部署Core后的真实握手/撤销/重启；无真实环境不标通过。线上变更和候选打包须具体授权。
+- [ ] RH-02/03后续：Core幂等发送/取消/交互回应、精确版本成果阅读和审阅；保持现有DSH能力与Core只读能力分开。总顺序仅在[现有规格第9节](docs/REMOTE_HARNESS_INTEGRATION.md#work-desktop-parity-plan)，B4和A4/A5不因本轮通过解除。
+
 ## 当前增量：Work 通用远程 Agent 接入
 
 - [x] 0.9.30 双端候选构建：同一提交 `1d5af0e76f88e7473a5073f14f23fde19e711259`，Windows Actions `39752315689`、Android `39752315657` 均 success；Android 原生插件已编译并签名。仅交付候选，不代表手机系统认证或 DSH 真机验收。[下载与测试记录](docs/evidence/remote-agent/release-0.9.30-candidate.md)。

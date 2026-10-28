@@ -1,5 +1,13 @@
 # bob-agent LLM-Wiki — 全量功能与逻辑字典 (Feature & Logic Directory)
 
+### RH-00 / RH-01 冻结入口
+
+2026-10-27工程契约及本地Core授权＋App只读Adapter已实现并完成专项测试，未打包、未发布。[第10节](docs/REMOTE_HARNESS_INTEGRATION.md#core-client-mapping-v1)是原生映射入口；服务端Wire与认证沿其指针读取，不复制第二份。[测试边界](docs/evidence/remote-agent/RH-01-native-read-preview.md#core-read-local)区分Rust/DPAPI、真实本地Core HTTP与模拟原生Bridge的Vue检查。24小时只读凭据不替代长期设备密钥＋refresh规范；长期身份、写入闭环及原生整包验收仍待完成，旧DSH保持独立。
+
+## Work 远程开发入口
+
+当前规划读 [REMOTE_HARNESS_INTEGRATION 第9节](docs/REMOTE_HARNESS_INTEGRATION.md#work-desktop-parity-plan)，现有实现/历史证据读同文件第8节，Online 契约和共同验收读 [CURRENT_STAGE](../cloud-agent/docs/CURRENT_STAGE.md#remote-work-client-plan)。代码定位：`src/views/WorkView.vue`、`src/components/work/RemoteAgentPanel.vue`、`src/work/remote-agent-service.js`、`src/work/remote-agent-state.js`、`src-tauri/src/remote_agent/` 和现有 Bridge。纯文本面板、二维码与有限重连不等于完整成果/恢复验收。
+
 > 本文件只导航现有能力与代码入口。产品北极星见 `docs/PRODUCT_VISION.md`，长期架构决定见 `docs/DECISIONS.md`，Work Continuity 目标计划见 `docs/superpowers/plans/2026-08-10-work-continuity-evolution-plan.md`。
 
 > **定位**：供 AI 编码代理（及人类开发者）快速检索、定位、阅读和修改 Bob-Agent 核心功能的“数字地图”。

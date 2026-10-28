@@ -22,7 +22,21 @@ pub struct Profile {
     pub uncertain_sessions: Vec<String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
-struct Entry { profile: Profile, cookie: String }
+#[serde(tag = "kind", content = "value")]
+pub(super) enum Credential {
+    DshCookie(String),
+    CoreCredential(super::core::CoreCredential),
+}
+// The legacy cookie field remains readable. New credentials are explicitly typed;
+// saving Core never overwrites a DSH profile sharing the same origin.
+#[derive(Clone, Serialize, Deserialize)]
+struct Entry {
+    profile: Profile,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cookie: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    credential: Option<Credential>,
+}
 
 pub struct Vault { path: PathBuf, key: [u8; 32], salt: Vec<u8>, entries: Vec<Entry> }
 impl Drop for Vault { fn drop(&mut self) { self.key.fill(0); } }
@@ -107,17 +121,61 @@ impl Vault {
     }
     pub fn list(&self) -> Vec<Profile> { self.entries.iter().map(|e| e.profile.clone()).collect() }
     pub fn credential(&self, id: &str) -> Result<(Profile, String), String> {
-        self.entries.iter().find(|e| e.profile.id == id).map(|e| (e.profile.clone(), e.cookie.clone())).ok_or_else(|| "REMOTE_NOT_FOUND".into())
+        let (profile, credential) = self.typed_credential(id)?;
+        match credential { Credential::DshCookie(cookie) => Ok((profile,cookie)), _ => Err("REMOTE_UNSUPPORTED_ADAPTER".into()) }
+    }
+    pub(super) fn typed_credential(&self, id: &str) -> Result<(Profile, Credential), String> {
+        let entry = self.entries.iter().find(|e| e.profile.id == id).ok_or("REMOTE_NOT_FOUND")?;
+        let credential = match (&entry.credential, &entry.cookie, entry.profile.adapter.as_str()) {
+            (Some(Credential::CoreCredential(c)), None, "bob-core") => Credential::CoreCredential(c.clone()),
+            (Some(Credential::DshCookie(c)), None, "dsh") => Credential::DshCookie(c.clone()),
+            (None, Some(c), "dsh") => Credential::DshCookie(c.clone()),
+            _ => return Err(STORAGE.into()),
+        };
+        Ok((entry.profile.clone(),credential))
     }
     pub fn save(&mut self, name: String, endpoint: String, cookie: String) -> Result<Profile, String> {
         if name.trim().is_empty() || name.len() > 120 { return Err("REMOTE_PROTOCOL".into()); }
         let mut entries = self.entries.clone();
-        let existing = entries.iter().position(|e| e.profile.endpoint == endpoint);
+        let existing = entries.iter().position(|e| e.profile.adapter == "dsh" && e.profile.endpoint == endpoint);
         if existing.is_none() && entries.len() >= 16 { return Err("REMOTE_CONNECTION_LIMIT".into()); }
         let profile = if let Some(i) = existing {
             let mut p = entries[i].profile.clone(); p.name = name.trim().into(); p
         } else { Profile { id: uuid::Uuid::new_v4().to_string(), name: name.trim().into(), endpoint, adapter: "dsh".into(), session_id: String::new(), auto_reconnect: true, uncertain_sessions: vec![] } };
-        let entry = Entry { profile: profile.clone(), cookie };
+        let entry = Entry { profile: profile.clone(), cookie: Some(cookie), credential: None };
+        if let Some(i) = existing { entries[i] = entry; } else { entries.push(entry); }
+        self.commit(entries)?;
+        Ok(profile)
+    }
+    pub(super) fn save_core(&mut self, name: String, endpoint: String, credential: super::core::CoreCredential) -> Result<Profile, String> {
+        if name.trim().is_empty() || name.len() > 120 { return Err("REMOTE_PROTOCOL".into()); }
+        // Keep the pre-Core encrypted database for explicit old-client rollback.
+        // Never overwrite an earlier backup or write plaintext credentials.
+        if !self.entries.iter().any(|e|e.profile.adapter=="bob-core") {
+            use std::io::Write;
+            let backup=self.path.with_extension("pre-core.db");
+            let bytes=std::fs::read(&self.path).map_err(|_|STORAGE)?;
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&backup) {
+                Ok(mut file)=> {
+                    if file.write_all(&bytes).and_then(|_|file.sync_all()).is_err() {
+                        drop(file);let _=std::fs::remove_file(&backup);return Err(STORAGE.into());
+                    }
+                }
+                Err(e) if e.kind()==std::io::ErrorKind::AlreadyExists=>{
+                    let meta=std::fs::symlink_metadata(&backup).map_err(|_|STORAGE)?;
+                    if !meta.is_file() || meta.file_type().is_symlink() || meta.len()<100 {return Err(STORAGE.into());}
+                },
+                Err(_)=>return Err(STORAGE.into()),
+            }
+        }
+        let mut entries = self.entries.clone();
+        // A new authorization must not silently replace a working credential. Its
+        // own profile also remains a revocation handle if later validation fails.
+        let existing: Option<usize> = None;
+        if existing.is_none() && entries.len() >= 16 { return Err("REMOTE_CONNECTION_LIMIT".into()); }
+        let profile = if let Some(i) = existing { let mut p = entries[i].profile.clone(); p.name = name.trim().into(); p }
+            else { Profile { id: uuid::Uuid::new_v4().to_string(), name: name.trim().into(), endpoint, adapter: "bob-core".into(), session_id: String::new(), auto_reconnect: true, uncertain_sessions: vec![] } };
+        let entry = Entry { profile: profile.clone(), cookie: None, credential: Some(Credential::CoreCredential(credential)) };
         if let Some(i) = existing { entries[i] = entry; } else { entries.push(entry); }
         self.commit(entries)?;
         Ok(profile)

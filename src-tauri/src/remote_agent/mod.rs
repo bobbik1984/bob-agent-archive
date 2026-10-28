@@ -2,6 +2,7 @@
 //! Saved credentials stay in the independent, explicitly unlocked encrypted local vault.
 //! Adapter capabilities describe this client's implemented surface, not the host's full authority.
 mod dsh;
+mod core;
 mod live;
 mod store;
 mod system_protection;
@@ -31,6 +32,8 @@ pub struct ConnectionInfo {
     pub adapter: String,
     pub endpoint: String,
     pub capabilities: Capabilities,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub core: Option<core::CoreIdentity>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -57,12 +60,36 @@ pub struct Catalog {
     pub sessions: Vec<RemoteSession>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallItem {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactItem {
+    pub path: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub kind: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryMessage {
     pub id: String,
     pub role: String,
     pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<ToolCallItem>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifacts: Vec<ArtifactItem>,
 }
 
 #[derive(Serialize)]
@@ -82,6 +109,15 @@ pub trait RemoteAgent: Send + Sync {
     fn watch<'a>(&'a self, session_id: &'a str) -> BoxFuture<'a, Result<LiveView, String>>;
     fn live(&self, watch_id: &str) -> Result<LiveView, String>;
     fn action(&self, input: ActionInput) -> BoxFuture<'_, Result<LiveView, String>>;
+    fn core_messages<'a>(&'a self, _project_id: &'a str, _after: u64) -> BoxFuture<'a, Result<core::CoreMessagePage, String>> {
+        Box::pin(async { Err("REMOTE_UNSUPPORTED_CAPABILITY".into()) })
+    }
+    fn core_snapshot<'a>(&'a self, _task_id: &'a str) -> BoxFuture<'a, Result<serde_json::Value, String>> {
+        Box::pin(async { Err("REMOTE_UNSUPPORTED_CAPABILITY".into()) })
+    }
+    fn core_tasks<'a>(&'a self, _project_id: &'a str, _cursor: Option<String>) -> BoxFuture<'a, Result<serde_json::Value,String>> {
+        Box::pin(async { Err("REMOTE_UNSUPPORTED_CAPABILITY".into()) })
+    }
     fn close(&self);
 }
 
@@ -167,10 +203,21 @@ pub async fn remote_agent_unlock(app: tauri::AppHandle, legacy_password: Option<
 
 #[tauri::command]
 pub async fn remote_agent_lock() -> Result<(), String> {
+    cancel_pending_core().await;
     let _operation = PROFILE_OPERATIONS.lock().await;
+    let pending:Vec<_>=CORE_PAIRINGS.lock().await.values().cloned().collect();
+    let mut cleanup_error=None;
+    for item in pending {
+        if item.cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+            if let Some(profile)=item.published.lock().await.take() {
+                if let Err(error)=revoke_core_profile(&profile).await {cleanup_error=Some(error);}
+            }
+        }
+    }
     for (_, adapter) in CONNECTIONS.lock().await.drain() { adapter.close(); }
     *store::VAULT.lock().await = None;
-    Ok(())
+    CORE_PAIRINGS.lock().await.clear();
+    if let Some(error)=cleanup_error {Err(error)} else {Ok(())}
 }
 
 async fn register(adapter: Arc<dyn RemoteAgent>) -> Result<ConnectionInfo, String> {
@@ -204,12 +251,19 @@ pub async fn remote_agent_save(input: ConnectInput, name: String) -> Result<Conn
 #[tauri::command]
 pub async fn remote_agent_reconnect(profile_id: String) -> Result<ConnectionInfo, String> {
     let _operation = PROFILE_OPERATIONS.lock().await;
-    let (profile, cookie) = {
-        let mut guard = store::VAULT.lock().await; store::unlocked(&mut guard)?.credential(&profile_id)?
+    let (profile, credential) = {
+        let mut guard = store::VAULT.lock().await; store::unlocked(&mut guard)?.typed_credential(&profile_id)?
     };
-    let mut adapter = dsh::Dsh::reconnect(&profile.endpoint, cookie).await?;
-    adapter.set_profile(profile.id);
-    register(Arc::new(adapter)).await
+    match credential {
+        store::Credential::DshCookie(cookie) => {
+            let mut adapter = dsh::Dsh::reconnect(&profile.endpoint, cookie).await?;
+            adapter.set_profile(profile.id); register(Arc::new(adapter)).await
+        }
+        store::Credential::CoreCredential(credential) => {
+            let adapter = core::Core::connect(&profile.endpoint, credential, Some(profile.id)).await?;
+            register(Arc::new(adapter)).await
+        }
+    }
 }
 
 #[tauri::command]
@@ -287,4 +341,132 @@ pub async fn remote_agent_disconnect(connection_id: String) -> Result<(), String
         adapter.close();
     }
     Ok(())
+}
+
+struct PendingCore {
+    pairing: Mutex<core::Pairing>,
+    cancelled: std::sync::atomic::AtomicBool,
+    published: Mutex<Option<String>>,
+    finished: std::sync::atomic::AtomicBool,
+}
+static CORE_PAIRINGS: Lazy<Mutex<HashMap<String, Arc<PendingCore>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+async fn cancel_pending_core() {
+    for pending in CORE_PAIRINGS.lock().await.values() {
+        if !pending.finished.load(std::sync::atomic::Ordering::SeqCst) {pending.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);}
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all="camelCase")]
+pub struct CorePairingResult { pub status: String, #[serde(skip_serializing_if="Option::is_none")] pub connection: Option<ConnectionInfo> }
+
+#[tauri::command]
+pub async fn remote_agent_core_pair_begin(endpoint: String, name: String) -> Result<core::PairingInfo, String> {
+    let _operation = PROFILE_OPERATIONS.lock().await;
+    { let mut vault = store::VAULT.lock().await; store::unlocked(&mut vault)?; }
+    let mut pending = CORE_PAIRINGS.lock().await;
+    // One pending authorization per app prevents hidden stale approvals.
+    pending.retain(|_,p| !p.finished.load(std::sync::atomic::Ordering::SeqCst));
+    if !pending.is_empty() { return Err("REMOTE_BUSY".into()); }
+    let (pairing, info) = core::Pairing::begin(&endpoint,&name).await?;
+    pending.insert(info.pairing_id.clone(),Arc::new(PendingCore{pairing:Mutex::new(pairing),cancelled:std::sync::atomic::AtomicBool::new(false),published:Mutex::new(None),finished:std::sync::atomic::AtomicBool::new(false)}));
+    Ok(info)
+}
+
+#[tauri::command]
+pub async fn remote_agent_core_pair_cancel(pairing_id: String) -> Result<(),String> {
+    let pending = CORE_PAIRINGS.lock().await.get(&pairing_id).cloned();
+    if let Some(pending) = pending {
+        pending.cancelled.store(true,std::sync::atomic::Ordering::SeqCst);
+        // Poll owns PROFILE_OPERATIONS while a token might be in flight. Wait until
+        // it has persisted or revoked that token before discarding the verifier.
+        let _operation = PROFILE_OPERATIONS.lock().await;
+        let profile=pending.published.lock().await.take();
+        let result=if let Some(profile)=profile {revoke_core_profile(&profile).await} else {Ok(())};
+        CORE_PAIRINGS.lock().await.remove(&pairing_id);
+        result?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remote_agent_core_pair_poll(pairing_id: String) -> Result<CorePairingResult,String> {
+    let pending = CORE_PAIRINGS.lock().await.get(&pairing_id).cloned().ok_or("REMOTE_STALE")?;
+    let _operation = PROFILE_OPERATIONS.lock().await;
+    let mut pairing = pending.pairing.lock().await;
+    if pending.cancelled.load(std::sync::atomic::Ordering::SeqCst) || pending.finished.load(std::sync::atomic::Ordering::SeqCst) { pending.finished.store(true,std::sync::atomic::Ordering::SeqCst); return Err("REMOTE_STALE".into()); }
+    { let mut vault = store::VAULT.lock().await; store::unlocked(&mut vault)?; }
+    let result = pairing.poll().await;
+    let credential = match result {
+        Ok(None) => return Ok(CorePairingResult{status:"pending".into(),connection:None}),
+        Ok(Some(credential)) => credential,
+        Err(error) => { pending.finished.store(true,std::sync::atomic::Ordering::SeqCst); return Err(error); }
+    };
+    let endpoint = pairing.base.origin().ascii_serialization();
+    let saved = {
+        let mut vault = store::VAULT.lock().await;
+        store::unlocked(&mut vault)?.save_core(pairing.name.clone(),endpoint.clone(),credential.clone())
+    };
+    let profile = match saved {
+            Ok(profile) => profile,
+            Err(_) => {
+                let revoked = core::Core::revoke(&endpoint,&credential).await.is_ok();
+                pending.finished.store(true,std::sync::atomic::Ordering::SeqCst);
+                return Err(if revoked { "REMOTE_STORAGE" } else { "REMOTE_PAIRING_REVOKE_REQUIRED" }.into());
+            }
+    };
+    *pending.published.lock().await=Some(profile.id.clone());
+    let result = core::Core::connect(&endpoint,credential.clone(),Some(profile.id.clone())).await;
+    if pending.cancelled.load(std::sync::atomic::Ordering::SeqCst) || result.is_err() {
+        let cleanup=revoke_core_profile(&profile.id).await;
+        *pending.published.lock().await=None;
+        pending.finished.store(true,std::sync::atomic::Ordering::SeqCst);
+        cleanup?;
+        return Err(result.err().unwrap_or_else(||"REMOTE_STALE".into()));
+    }
+    let connected = register(Arc::new(result?)).await;
+    if connected.is_err() || pending.cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+        let cleanup=revoke_core_profile(&profile.id).await;
+        *pending.published.lock().await=None;
+        pending.finished.store(true,std::sync::atomic::Ordering::SeqCst);
+        cleanup?; return Err(connected.err().unwrap_or_else(||"REMOTE_STALE".into()));
+    }
+    pending.finished.store(true,std::sync::atomic::Ordering::SeqCst);
+    // Retain the completed receipt until cancel/next begin: a late UI cancel still
+    // closes the connection and revokes the issued credential.
+    Ok(CorePairingResult{status:"connected".into(),connection:Some(connected?)})
+}
+
+#[tauri::command]
+pub async fn remote_agent_core_revoke(profile_id:String)->Result<(),String> {
+    let _operation=PROFILE_OPERATIONS.lock().await;
+    revoke_core_profile(&profile_id).await
+}
+async fn revoke_core_profile(profile_id:&str)->Result<(),String> {
+    let (profile,credential)={let mut guard=store::VAULT.lock().await;store::unlocked(&mut guard)?.typed_credential(&profile_id)?};
+    let credential=match credential {store::Credential::CoreCredential(c)=>c,_=>return Err("REMOTE_UNSUPPORTED_ADAPTER".into())};
+    CONNECTIONS.lock().await.retain(|_,adapter|{if adapter.info().profile_id.as_deref()==Some(profile_id){adapter.close();false}else{true}});
+    let revoked=core::Core::revoke(&profile.endpoint,&credential).await;
+    let mut guard=store::VAULT.lock().await;
+    let vault=store::unlocked(&mut guard)?;
+    if revoked.is_ok() {vault.forget(profile_id)} else {
+        vault.update(profile_id,None,Some(false),None)?;
+        Err("REMOTE_PAIRING_REVOKE_REQUIRED".into())
+    }
+}
+
+#[tauri::command]
+pub async fn remote_agent_core_messages(connection_id:String,project_id:String,after:u64)->Result<core::CoreMessagePage,String> {
+    get(&connection_id).await?.core_messages(&project_id,after).await
+}
+
+#[tauri::command]
+pub async fn remote_agent_core_snapshot(connection_id:String,task_id:String)->Result<serde_json::Value,String> {
+    get(&connection_id).await?.core_snapshot(&task_id).await
+}
+
+#[tauri::command]
+pub async fn remote_agent_core_tasks(connection_id:String,project_id:String,cursor:Option<String>)->Result<serde_json::Value,String> {
+    get(&connection_id).await?.core_tasks(&project_id,cursor).await
 }

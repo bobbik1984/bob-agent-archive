@@ -1,5 +1,11 @@
 # bob-agent 技术架构
 
+## Work 原生 Core 客户端边界（2026-10-27 工程冻结，待实现）
+
+Bob仍独立可用，DSH直接连接不依赖Online。Core工作经原生Adapter/Bridge读取，服务端实体原ID与来源/主体保留；本地Project仅显式关联，不双写Core业务状态。Core凭据与DSH Cookie使用不同vault类型，所有网络/兑换/长期秘密在Rust侧；不复制浏览器Basic密码或Provider登录态。现有DSH二维码导入Token确有短暂JS处理，不能将设计目标当作已实现事实。
+
+服务端协议唯一正文见[Online冻结合同](../../cloud-agent/docs/CURRENT_STAGE.md#core-client-contract-v1)；客户端映射、迁移兼容与恢复要求仅见[远程接入规格第10节](REMOTE_HARNESS_INTEGRATION.md#core-client-mapping-v1)。冻结并未使bob-core Adapter、完整恢复或成果阅读器上线。
+
 > **架构版本**: Tauri v2 (Rust) — 自 2026-05-10 完成从 Electron 的全面迁移
 > **历史归档**: Electron 时代架构见 `docs/agents_electron.md`
 

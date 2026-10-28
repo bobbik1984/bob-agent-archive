@@ -5,7 +5,7 @@ export const REMOTE_AGENT_QR_SCHEME = 'bob:';
 export const REMOTE_AGENT_QR_HOST = 'remote-agent';
 export const REMOTE_AGENT_QR_VERSION = '1';
 export const KNOWN_REMOTE_AGENT_ADAPTERS = Object.freeze(['dsh', 'bob-core']);
-export const SUPPORTED_REMOTE_AGENT_ADAPTERS = Object.freeze(['dsh']);
+export const SUPPORTED_REMOTE_AGENT_ADAPTERS = Object.freeze(['dsh', 'bob-core']);
 
 const REQUIRED_KEYS = Object.freeze(['v', 'adapter', 'name', 'endpoint', 'token']);
 const ALLOWED_KEYS = new Set(REQUIRED_KEYS);
@@ -158,21 +158,23 @@ export function parseRemoteAgentQr(rawInput) {
     params.set(key, value);
   }
 
-  for (const requiredKey of REQUIRED_KEYS) {
+  const version = params.get('v');
+  const adapter = params.get('adapter');
+  const coreV2 = version === '2' && adapter === 'bob-core';
+  if (coreV2 && params.has('token')) return { ok: false, error: 'REMOTE_QR_INVALID' };
+  for (const requiredKey of coreV2 ? REQUIRED_KEYS.filter(key => key !== 'token') : REQUIRED_KEYS) {
     if (!params.has(requiredKey)) {
       return { ok: false, error: 'REMOTE_QR_MISSING_PARAM' };
     }
   }
 
-  const version = params.get('v');
   if (!version) {
     return { ok: false, error: 'REMOTE_QR_MISSING_PARAM' };
   }
-  if (version !== REMOTE_AGENT_QR_VERSION) {
+  if (version !== REMOTE_AGENT_QR_VERSION && !coreV2) {
     return { ok: false, error: 'REMOTE_QR_VERSION' };
   }
 
-  const adapter = params.get('adapter');
   if (!adapter) {
     return { ok: false, error: 'REMOTE_QR_MISSING_PARAM' };
   }
@@ -194,6 +196,8 @@ export function parseRemoteAgentQr(rawInput) {
     return { ok: false, error: endpointResult.error };
   }
 
+  if (coreV2) return { ok: true, v: '2', adapter, name, endpoint: endpointResult.endpoint, supported: true };
+
   const token = params.get('token');
   if (!token) {
     return { ok: false, error: 'REMOTE_QR_MISSING_PARAM' };
@@ -202,7 +206,7 @@ export function parseRemoteAgentQr(rawInput) {
     return { ok: false, error: 'REMOTE_QR_INVALID' };
   }
 
-  const supported = SUPPORTED_REMOTE_AGENT_ADAPTERS.includes(adapter);
+  const supported = adapter === 'dsh'; // Token-bearing Core v1 invitations remain unsupported.
   return {
     ok: true,
     v: REMOTE_AGENT_QR_VERSION,

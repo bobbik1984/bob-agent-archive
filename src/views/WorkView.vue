@@ -14,19 +14,12 @@ const layoutMode = inject('layoutMode', ref('desktop-wide'));
 <style scoped>
 .work-view {
   height: 100%;
-  overflow: auto;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   background: var(--bg-primary);
   color: var(--text-primary);
-  padding: clamp(16px, 2.5vw, 28px);
-  scrollbar-gutter: stable;
-}
-
-.work-view.layout-desktop-compact {
-  padding: 12px 12px 84px;
-}
-
-.work-view.layout-mobile-native {
-  padding: 0 0 84px;
 }
 </style>

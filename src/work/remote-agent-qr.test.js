@@ -8,9 +8,15 @@ import {
 } from './remote-agent-qr.js';
 
 describe('parseRemoteAgentQr protocol validation and test vectors', () => {
+  it('accepts only secret-free Core v2 invitations', () => {
+    const qr = 'bob://remote-agent?v=2&adapter=bob-core&name=Core&endpoint=https%3A%2F%2Fcore.invalid';
+    expect(parseRemoteAgentQr(qr)).toEqual({ ok: true, v: '2', adapter: 'bob-core', name: 'Core', endpoint: 'https://core.invalid', supported: true });
+    for (const suffix of ['&token=secret', '&principal_id=other', '&v=2', '&verifier=secret']) expect(parseRemoteAgentQr(qr+suffix).ok).toBe(false);
+    expect(parseRemoteAgentQr(qr.replace('v=2','v=3')).ok).toBe(false);
+  });
   it('exports the canonical adapter lists for cloud-agent alignment', () => {
     expect(KNOWN_REMOTE_AGENT_ADAPTERS).toEqual(['dsh', 'bob-core']);
-    expect(SUPPORTED_REMOTE_AGENT_ADAPTERS).toEqual(['dsh']);
+    expect(SUPPORTED_REMOTE_AGENT_ADAPTERS).toEqual(['dsh', 'bob-core']);
   });
 
   it('parses Chinese node names and preserves special token characters (+ / = & %) with single decoding', () => {

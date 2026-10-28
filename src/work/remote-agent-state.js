@@ -130,7 +130,9 @@ export function createRemoteAgentController(api, publish) {
           }
           return;
         }
-        const history = await api.remoteAgentHistory(connection.connectionId, sessionId);
+        const history = connection.adapter === 'bob-core'
+          ? await api.remoteAgentCoreMessages(connection.connectionId, sessionId, 0)
+          : await api.remoteAgentHistory(connection.connectionId, sessionId);
         if (current === generation && ticket === selection) update({ history, historyBusy: false });
       } catch (error) {
         if (current === generation && ticket === selection) update({ historyBusy: false, error: safeError(error) });

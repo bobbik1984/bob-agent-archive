@@ -8,6 +8,24 @@
       </div>
     </header>
     <p>{{ t('remote_agent.vault_hint') }}</p>
+    <aside v-if="state.pairing" class="qr-confirm" aria-live="polite" data-core-pairing>
+      <h4>{{ t('remote_agent.core_authorize') }}</h4>
+      <p>{{ t('remote_agent.core_pair_hint') }}</p>
+      <strong>{{ state.pairing.name }}</strong>
+      <small>{{ state.pairing.endpoint }}</small>
+      <strong data-core-code>{{ state.pairing.userCode }}</strong>
+      <small>{{ t('remote_agent.core_fingerprint') }}: {{ state.pairing.challengeFingerprint }}</small>
+      <small>{{ t('remote_agent.core_expires') }}: {{ new Date(state.pairing.expiresAt).toLocaleString() }}</small>
+      <div class="actions">
+        <button type="button" @click="service.openPairing()">{{ t('remote_agent.core_open_browser') }}</button>
+        <button type="button" @click="service.cancelPairing()">{{ t('common.cancel') }}</button>
+      </div>
+    </aside>
+    <aside v-if="state.pairingIssue" class="qr-confirm" role="alert">
+      <p>{{ t('remote_agent.errors.REMOTE_PAIRING_REVOKE_REQUIRED') }}</p>
+      <small>{{ state.pairingIssue.endpoint }} · {{ state.pairingIssue.pairingId }}</small>
+      <button type="button" @click="service.openPairing()">{{ t('remote_agent.core_open_browser') }}</button>
+    </aside>
     <aside v-if="state.pendingQr" class="qr-confirm" role="region" :aria-label="t('remote_agent.qr_confirm_title')">
       <h4>{{ t('remote_agent.qr_confirm_title') }}</h4>
       <p v-if="state.pendingQr.supported">{{ t('remote_agent.qr_confirm_hint') }}</p>
@@ -33,17 +51,21 @@
           <button :disabled="state.busy" @click="service.connectProfile(profile.id)">{{ t('remote_agent.connect') }}</button>
           <button v-if="state.connection?.profileId === profile.id" @click="service.disconnect()">{{ t('remote_agent.disconnect') }}</button>
           <button @click="edit(profile)">{{ t('remote_agent.update_auth') }}</button>
+          <button v-if="profile.adapter === 'bob-core'" @click="revokeId = profile.id">{{ t('remote_agent.core_revoke') }}</button>
           <button @click="forgetId = profile.id">{{ t('remote_agent.forget') }}</button>
         </div>
         <label class="automatic"><input type="checkbox" :checked="profile.autoReconnect" @change="service.automatic(profile.id, $event.target.checked)" />{{ t('remote_agent.auto_reconnect') }}</label>
         <div v-if="forgetId === profile.id" class="actions"><p>{{ t('remote_agent.forget_hint') }}</p><button @click="forget(profile.id)">{{ t('remote_agent.confirm_forget') }}</button><button @click="forgetId = ''">{{ t('common.cancel') }}</button></div>
+        <div v-if="revokeId === profile.id" class="actions"><p>{{ t('remote_agent.core_revoke_hint') }}</p><button @click="revoke(profile.id)">{{ t('remote_agent.core_revoke') }}</button><button @click="revokeId = ''">{{ t('common.cancel') }}</button></div>
       </article>
       <form @submit.prevent="save">
         <h4>{{ t('remote_agent.add_connection') }}</h4>
+        <label>{{ t('remote_agent.adapter') }}<select v-model="adapter" data-adapter-select><option value="dsh">{{ t('remote_agent.adapter_dsh') }}</option><option value="bob-core">{{ t('remote_agent.adapter_bob-core') }}</option></select></label>
         <label>{{ t('remote_agent.name') }}<input v-model="name" maxlength="120" required /></label>
-        <label>{{ t('remote_agent.endpoint') }}<input v-model="endpoint" type="url" autocomplete="off" spellcheck="false" required /></label>
-        <label>{{ t('remote_agent.token') }}<input v-model="token" type="password" autocomplete="off" spellcheck="false" /></label>
-        <button :disabled="state.busy">{{ t(state.busy ? 'remote_agent.connecting' : 'remote_agent.save_connect') }}</button>
+        <label>{{ t(adapter === 'bob-core' ? 'remote_agent.core_endpoint' : 'remote_agent.endpoint') }}<input v-model="endpoint" type="url" autocomplete="off" spellcheck="false" required /></label>
+        <label v-if="adapter === 'dsh'">{{ t('remote_agent.token') }}<input v-model="token" type="password" autocomplete="off" spellcheck="false" /></label>
+        <p v-else>{{ t('remote_agent.core_read_only') }}</p>
+        <button :disabled="state.busy || state.pairingBusy || !!state.pairing">{{ t(state.busy || state.pairingBusy ? 'remote_agent.connecting' : adapter === 'bob-core' ? 'remote_agent.core_authorize' : 'remote_agent.save_connect') }}</button>
       </form>
     </template>
     <p v-if="state.connection && !state.error && !state.busy" role="status">{{ t('remote_agent.connection_ready') }}</p>
@@ -59,6 +81,8 @@ const { t, te } = useI18n();
 const service = getRemoteAgentService(window.appAPI), state = service.state;
 const activeDrawer = inject('activeDrawer', ref('settings'));
 const password = ref(''), name = ref(''), endpoint = ref(''), token = ref(''), forgetId = ref('');
+const adapter = ref('dsh'), revokeId = ref('');
+watch(adapter, () => { token.value = ''; });
 function clearTemporaryInputs() {
   password.value = '';
   token.value = '';
@@ -94,9 +118,11 @@ function cancelQr() {
   service.cancelQr();
 }
 async function unlock() { const value = state.migrationRequired ? password.value : undefined; password.value = ''; await service.unlock(value); }
-function edit(profile) { name.value = profile.name; endpoint.value = profile.endpoint; token.value = ''; }
+function edit(profile) { adapter.value = profile.adapter || 'dsh'; name.value = profile.name; endpoint.value = profile.endpoint; token.value = ''; }
 async function forget(id) { await service.forget(id); forgetId.value = ''; }
+async function revoke(id) { if (await service.revoke(id)) revokeId.value = ''; }
 async function save() {
+  if (adapter.value === 'bob-core') { await service.beginPairing(endpoint.value, name.value); return; }
   const input = { adapter: 'dsh', endpoint: endpoint.value, token: token.value };
   token.value = '';
   try { const url = new URL(endpoint.value); url.search = ''; url.hash = ''; endpoint.value = url.toString(); } catch { endpoint.value = ''; }
@@ -121,4 +147,5 @@ input { min-width: 0; box-sizing: border-box; width: 100%; min-height: 44px; fon
 button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; font: inherit; border: 1px solid var(--border-color); border-radius: 10px; color: var(--text-primary); background: var(--bg-primary); cursor: pointer; }
 button:disabled { opacity: .5; } .actions { margin-top: 12px; } .automatic { display: flex; align-items: center; min-height: 44px; } .automatic input { width: 20px; }
 .error { color: var(--color-error); }
+select { min-width: 0; width: 100%; min-height: 44px; font: inherit; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); }
 </style>

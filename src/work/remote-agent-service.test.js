@@ -19,6 +19,73 @@ function fixture() {
 }
 afterEach(() => vi.useRealTimers());
 describe('saved connections and safe reconnect', () => {
+  it('loads Core pages and pinned task facts, rejecting mismatched snapshots', async () => {
+    const { api, service } = fixture();
+    api.remoteAgentReconnect.mockResolvedValue({ connectionId: 'core', profileId: 'p1', adapter: 'bob-core', capabilities: { catalog: true, history: true, send: false } });
+    api.remoteAgentCoreMessages = vi.fn(async (_, sessionId, after) => ({ sessionId, messages: [{ id: after ? 'm2' : 'm1', role: 'assistant', text: 'fact' }], hasMore: !after, nextAfter: after ? 2 : 1 }));
+    api.remoteAgentCoreTasks = vi.fn(async (_, projectId) => ({ items: [{ id: 't1', project_id: projectId }], hasMore: false, nextCursor: null }));
+    api.remoteAgentCoreSnapshot = vi.fn(async () => ({ task: { id: 't1', project_id: 's1' }, executions: [], verifications: [], observedAt: 1 }));
+    await service.resume(); await service.select('s1');
+    expect(await service.moreCoreMessages()).toBe(true); expect(service.state.history.messages.map(x=>x.id)).toEqual(['m1','m2']);
+    expect(await service.readCoreSnapshot('t1')).toBe(true); expect(service.state.coreSnapshot.task.id).toBe('t1');
+    api.remoteAgentCoreSnapshot.mockResolvedValue({ task: { id: 't1', project_id: 'other' } });
+    expect(await service.readCoreSnapshot('t1')).toBe(false); expect(service.state.coreSnapshot).toBeNull(); expect(service.state.error).toBe('REMOTE_PROTOCOL');
+    await service.dispose();
+  });
+  it('failed revocation stops automatic resume rather than silently reusing the credential', async () => {
+    const { api, service } = fixture(); await service.resume();
+    api.remoteAgentCoreRevoke = vi.fn().mockRejectedValue('REMOTE_PAIRING_REVOKE_REQUIRED');
+    expect(await service.revoke('p1')).toBe(false); await service.resume();
+    expect(api.remoteAgentReconnect).toHaveBeenCalledTimes(1); expect(service.state.connection).toBeNull(); expect(service.state.profiles).toHaveLength(1);
+    await service.dispose();
+  });
+  it('stops pairing at the absolute deadline and keeps a failed revocation visible', async () => {
+    vi.useFakeTimers(); const { api, service } = fixture(); await service.unlock();
+    api.remoteAgentCorePairBegin = vi.fn(async () => ({ pairingId: 'pair', userCode: '123456789A', verificationUri: 'https://core.invalid/client-connect', expiresAt: Date.now() + 5000, intervalMs: 5000 }));
+    api.remoteAgentCorePairPoll = vi.fn(); api.remoteAgentCorePairCancel = vi.fn();
+    await service.beginPairing('https://core.invalid', 'Core'); await vi.advanceTimersByTimeAsync(5000);
+    expect(api.remoteAgentCorePairPoll).not.toHaveBeenCalled(); expect(service.state.error).toBe('REMOTE_PAIRING_EXPIRED');
+    expect(service.state.pairing).toBeNull(); api.remoteAgentCoreRevoke = vi.fn().mockRejectedValue('REMOTE_NETWORK');
+    expect(await service.revoke('p1')).toBe(false); expect(service.state.profiles).toHaveLength(1); expect(service.state.error).toBe('REMOTE_NETWORK');
+    await service.dispose();
+  });
+  it('does not retry a lost exchange reply or claim it was connected', async () => {
+    vi.useFakeTimers(); const { api, service } = fixture(); await service.unlock();
+    api.remoteAgentCorePairBegin = vi.fn(async () => ({ pairingId: 'pair', userCode: '123456789A', verificationUri: 'https://core.invalid/client-connect', expiresAt: Date.now()+600000, intervalMs: 5000 }));
+    api.remoteAgentCorePairPoll = vi.fn().mockRejectedValue('REMOTE_EXCHANGE_UNKNOWN'); api.remoteAgentCorePairCancel = vi.fn();
+    await service.beginPairing('https://core.invalid', 'Core'); await vi.advanceTimersByTimeAsync(90000);
+    expect(api.remoteAgentCorePairPoll).toHaveBeenCalledTimes(1); expect(service.state.connection).toBeNull();
+    expect(service.state.error).toBe('REMOTE_EXCHANGE_UNKNOWN'); await service.dispose();
+  });
+  it('pairs Core without transferring credentials to Vue or enabling task actions', async () => {
+    vi.useFakeTimers(); const { api, service } = fixture(); await service.unlock();
+    api.remoteAgentCorePairBegin = vi.fn(async () => ({ pairingId: 'pair', userCode: '123456789A', verificationUri: 'https://core.invalid/client-connect?user_code=123456789A', expiresAt: new Date(Date.now() + 600000).toISOString(), intervalMs: 5000, verifier: 'must-not-leak' }));
+    api.remoteAgentCorePairPoll = vi.fn().mockResolvedValueOnce({ status: 'pending' }).mockResolvedValueOnce({ status: 'connected', connection: { connectionId: 'core', profileId: 'pc', adapter: 'bob-core', capabilities: { catalog: true, history: true, send: false } } });
+    api.remoteAgentCorePairCancel = vi.fn(); api.openExternal = vi.fn();
+    const qr = 'bob://remote-agent?v=2&adapter=bob-core&name=Core&endpoint=https%3A%2F%2Fcore.invalid';
+    expect(service.stageQr(qr)).toBe(true); expect(await service.confirmQr()).toBe(true);
+    expect(JSON.stringify(service.state)).not.toContain('must-not-leak');
+    await service.openPairing(); expect(api.openExternal).toHaveBeenCalledWith('https://core.invalid/client-connect?user_code=123456789A');
+    await vi.advanceTimersByTimeAsync(10000); expect(service.state.connection.adapter).toBe('bob-core');
+    expect(service.state.pairing).toBeNull(); expect(await service.send('no', 'r')).toBe(false);
+    expect(api.remoteAgentAction).not.toHaveBeenCalled(); await service.dispose();
+  });
+  it('cancels Core polling on lock and ignores late native responses', async () => {
+    vi.useFakeTimers(); const { api, service } = fixture(); await service.unlock(); let resolve;
+    api.remoteAgentCorePairBegin = vi.fn(async () => ({ pairingId: 'pair', userCode: '123456789A', verificationUri: 'https://core.invalid/client-connect', expiresAt: new Date(Date.now() + 600000).toISOString(), intervalMs: 5000 }));
+    api.remoteAgentCorePairPoll = vi.fn(() => new Promise(r => { resolve = r; })); api.remoteAgentCorePairCancel = vi.fn();
+    await service.beginPairing('https://core.invalid', 'Core'); await vi.advanceTimersByTimeAsync(5000);
+    await service.lock(); resolve({ status: 'connected', connection: { connectionId: 'late', capabilities: { catalog: true } } });
+    await vi.advanceTimersByTimeAsync(60000); expect(service.state.connection).toBeNull(); expect(service.state.pairing).toBeNull();
+    expect(api.remoteAgentCorePairPoll).toHaveBeenCalledTimes(1); expect(api.remoteAgentCorePairCancel).toHaveBeenCalledWith('pair'); await service.dispose();
+  });
+  it('rejects foreign authorization pages and never opens them', async () => {
+    const { api, service } = fixture(); await service.unlock();
+    api.remoteAgentCorePairBegin = vi.fn(async () => ({ pairingId: 'pair', userCode: '123456789A', verificationUri: 'https://evil.invalid/client-connect', expiresAt: new Date(Date.now()+600000).toISOString() }));
+    api.openExternal = vi.fn();
+    expect(await service.beginPairing('https://core.invalid', 'Core')).toBe(false); expect(service.state.error).toBe('REMOTE_PROTOCOL');
+    await service.openPairing(); expect(api.openExternal).not.toHaveBeenCalled(); await service.dispose();
+  });
   it('unlocks with the native system without a Bob password', async () => {
     const { api, service } = fixture();
     expect(await service.unlock()).toBe(true);

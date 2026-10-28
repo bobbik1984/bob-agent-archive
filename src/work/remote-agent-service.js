@@ -1,7 +1,7 @@
 // One application service per bridge, not per component. Credentials stay in Rust.
 import { reactive } from 'vue';
 import { createRemoteAgentController } from './remote-agent-state.js';
-import { parseRemoteAgentQr } from './remote-agent-qr.js';
+import { parseRemoteAgentQr, normalizeHttpsRootEndpoint } from './remote-agent-qr.js';
 
 function endpointOrigin(value) {
   try { return new URL(String(value || '').trim()).origin; }
@@ -11,7 +11,11 @@ function endpointOrigin(value) {
 export function createRemoteAgentService(api) {
   const state = reactive({ connection: null, catalog: null, history: null, live: null,
     sessionId: '', busy: false, error: '', unlocked: false, profiles: [], selectedProfileId: '',
-    reconnecting: false, retries: 0, storageBusy: false, migrationRequired: false, pendingQr: null });
+    reconnecting: false, retries: 0, storageBusy: false, migrationRequired: false, pendingQr: null,
+    pairing: null, pairingIssue: null, pairingBusy: false, coreTasks: null, coreSnapshot: null, coreBusy: false, coreMoreBusy: false });
+  let pairingTimer = null, pairingGeneration = 0;
+  let coreEpoch = 0;
+  function resetCore() { coreEpoch++; state.coreTasks = null; state.coreSnapshot = null; state.coreBusy = false; state.coreMoreBusy = false; }
   let retryTimer = null, generation = 0, connecting = false, paused = false, disposed = false, healthySince = 0, qrToken = '';
   const transient = new Set(['REMOTE_NETWORK', 'REMOTE_TIMEOUT', 'REMOTE_DISCONNECTED']);
   const safe = e => /^REMOTE_[A-Z_]+$/.test(String(e)) ? String(e) : 'REMOTE_UNKNOWN';
@@ -26,6 +30,7 @@ export function createRemoteAgentService(api) {
     }, Math.min(16000, 1000 * 2 ** state.retries));
   }
   const controller = createRemoteAgentController(api, patch => {
+    if ('connection' in patch) resetCore();
     Object.assign(state, patch);
     // A socket that opens and immediately fails must not reset the retry budget.
     if (state.error || !state.live?.ready) healthySince = 0;
@@ -49,18 +54,20 @@ export function createRemoteAgentService(api) {
       await load();
       if (ok) {
         const sessionId = profile()?.sessionId;
-        if (sessionId && state.catalog?.sessions.some(s => s.sessionId === sessionId)) await controller.select(sessionId);
+        if (sessionId && state.catalog?.sessions.some(s => s.sessionId === sessionId)) await select(sessionId);
       }
       return ok;
     } finally { connecting = false; if (current === generation) scheduleRetry(); }
   }
   async function select(id) {
+    resetCore();
     if ((!state.connection || state.live?.ready === false) && state.selectedProfileId && !connecting) {
       const ok = await connectProfile(state.selectedProfileId);
       if (!ok) return;
     }
     const current = generation, selectedProfileId = state.selectedProfileId;
     await controller.select(id);
+    if (current === generation && state.history?.sessionId === id && state.connection?.adapter === 'bob-core') await loadCoreTasks();
     if (current === generation && state.history?.sessionId === id && selectedProfileId) {
       try { await api.remoteAgentProfileUpdate(selectedProfileId, { sessionId: id }); await load(); }
       catch (e) { state.error = safe(e); }
@@ -87,24 +94,145 @@ export function createRemoteAgentService(api) {
     await controller.disconnect();
     if (persistenceError) state.error = persistenceError;
   }
-  function hasExistingEndpoint(endpoint) {
+  function hasExistingEndpoint(endpoint, adapter = 'dsh') {
     const target = endpointOrigin(endpoint);
     if (!target) return false;
-    return state.profiles.some(p => endpointOrigin(p.endpoint) === target);
+    return state.profiles.some(p => (p.adapter || 'dsh') === adapter && endpointOrigin(p.endpoint) === target);
   }
   function clearQr() {
     qrToken = '';
     state.pendingQr = null;
   }
+  async function loadCoreTasks(more = false) {
+    if (state.connection?.adapter !== 'bob-core' || !state.sessionId || state.coreBusy) return false;
+    const epoch = coreEpoch, connectionId = state.connection.connectionId, projectId = state.sessionId;
+    const cursor = more ? state.coreTasks?.nextCursor : null;
+    if (more && (!state.coreTasks?.hasMore || !cursor)) return false;
+    state.coreBusy = true;
+    try {
+      const page = await api.remoteAgentCoreTasks(connectionId, projectId, cursor);
+      if (epoch !== coreEpoch || disposed) return false;
+      if (!Array.isArray(page.items) || page.items.some(x => x.project_id !== projectId) || (page.hasMore && (!page.nextCursor || page.nextCursor === cursor))) throw 'REMOTE_PROTOCOL';
+      const old = more ? state.coreTasks.items : [];
+      if (page.items.some(x => old.some(y => y.id === x.id))) throw 'REMOTE_PROTOCOL';
+      state.coreTasks = { ...page, items: [...old, ...page.items] }; return true;
+    } catch (e) { if (epoch === coreEpoch) state.error = safe(e); return false; }
+    finally { if (epoch === coreEpoch) state.coreBusy = false; }
+  }
+  async function cancelPairing() {
+    pairingGeneration++;
+    clearTimeout(pairingTimer); pairingTimer = null;
+    const previous = state.pairing, id = previous?.pairingId;
+    state.pairing = null; state.pairingBusy = false;
+    if (id) {
+      try { await api.remoteAgentCorePairCancel(id); }
+      catch (e) { state.error = safe(e); if (state.error === 'REMOTE_PAIRING_REVOKE_REQUIRED') state.pairingIssue = previous; }
+    }
+  }
+  async function pollPairing(epoch) {
+    if (epoch !== pairingGeneration || disposed || !state.pairing) return;
+    if (Date.now() >= new Date(state.pairing.expiresAt).getTime()) {
+      await cancelPairing(); state.error = 'REMOTE_PAIRING_EXPIRED'; return;
+    }
+    try {
+      const result = await api.remoteAgentCorePairPoll(state.pairing.pairingId);
+      if (epoch !== pairingGeneration || disposed) return;
+      if (result.status === 'connected' && result.connection) {
+        const connection = result.connection;
+        state.pairing = null;
+        const ok = await controller.connect(null, async () => connection, { preservePreviousOnError: true });
+        if (epoch !== pairingGeneration || disposed) return;
+        if (ok) state.selectedProfileId = connection.profileId;
+        await load(); return;
+      }
+      if (result.status !== 'pending') throw 'REMOTE_PROTOCOL';
+      pairingTimer = setTimeout(() => void pollPairing(epoch), Math.max(5000, state.pairing.intervalMs || 5000));
+    } catch (e) {
+      if (epoch === pairingGeneration) {
+        const previous = state.pairing;
+        await cancelPairing();
+        if (state.error !== 'REMOTE_PAIRING_REVOKE_REQUIRED') state.error = safe(e);
+        if (['REMOTE_PAIRING_REVOKE_REQUIRED', 'REMOTE_EXCHANGE_UNKNOWN'].includes(state.error)) state.pairingIssue = previous;
+      }
+    }
+  }
   const service = {
-    state, load, resume, select, connectProfile,
+    state, load, resume, select, connectProfile, loadCoreTasks,
+    async moreCoreMessages() {
+      if (state.connection?.adapter !== 'bob-core' || !state.history?.hasMore || state.coreMoreBusy) return false;
+      const epoch = coreEpoch, projectId = state.sessionId, after = state.history.nextAfter;
+      state.coreMoreBusy = true;
+      try {
+        const page = await api.remoteAgentCoreMessages(state.connection.connectionId, projectId, after);
+        if (epoch !== coreEpoch || disposed) return false;
+        if (page.sessionId !== projectId || !Array.isArray(page.messages) || !Number.isSafeInteger(page.nextAfter) || page.nextAfter < after || (page.hasMore && page.nextAfter === after)) throw 'REMOTE_PROTOCOL';
+        if (page.messages.some(x => state.history.messages.some(y => y.id === x.id))) throw 'REMOTE_PROTOCOL';
+        state.history = { ...page, messages: [...state.history.messages, ...page.messages] }; return true;
+      } catch (e) { if (epoch === coreEpoch) state.error = safe(e); return false; }
+      finally { if (epoch === coreEpoch) state.coreMoreBusy = false; }
+    },
+    async readCoreSnapshot(taskId) {
+      if (state.connection?.adapter !== 'bob-core' || !state.coreTasks?.items.some(x => x.id === taskId)) return false;
+      const epoch = ++coreEpoch, projectId = state.sessionId;
+      state.coreSnapshot = null; state.coreBusy = true; state.coreMoreBusy = false;
+      try {
+        const snapshot = await api.remoteAgentCoreSnapshot(state.connection.connectionId, taskId);
+        if (epoch !== coreEpoch || disposed) return false;
+        if (snapshot.task?.id !== taskId || snapshot.task?.project_id !== projectId) throw 'REMOTE_PROTOCOL';
+        state.coreSnapshot = snapshot; return true;
+      } catch (e) { if (epoch === coreEpoch) state.error = safe(e); return false; }
+      finally { if (epoch === coreEpoch) state.coreBusy = false; }
+    },
     async refresh() {
       if ((!state.connection || state.live?.ready === false) && state.selectedProfileId && !connecting) {
         return await connectProfile(state.selectedProfileId);
       }
       return await controller.refresh();
     },
-    disconnect,
+    disconnect, cancelPairing,
+    async beginPairing(endpoint, name) {
+      if (!state.unlocked || disposed || state.pairingBusy) { state.error = 'REMOTE_VAULT_LOCKED'; return false; }
+      const normalized = normalizeHttpsRootEndpoint(endpoint);
+      if (!normalized.ok) { state.error = normalized.error; return false; }
+      await cancelPairing();
+      const epoch = pairingGeneration;
+      state.pairingBusy = true; state.error = ''; state.pairingIssue = null;
+      let pendingId = '';
+      try {
+        const result = await api.remoteAgentCorePairBegin(normalized.endpoint, name);
+        pendingId = result.pairingId;
+        if (epoch !== pairingGeneration || disposed) {
+          await api.remoteAgentCorePairCancel(result.pairingId); return false;
+        }
+        const uri = new URL(result.verificationUri);
+        if (uri.origin !== normalized.endpoint || uri.pathname !== '/client-connect' || uri.username || uri.password || uri.hash ||
+            !Number.isFinite(new Date(result.expiresAt).getTime()) || !result.pairingId || !result.userCode) throw 'REMOTE_PROTOCOL';
+        // Whitelist public metadata; never copy credential or verifier fields into Vue state.
+        state.pairing = { pairingId: result.pairingId, userCode: result.userCode, verificationUri: uri.href, endpoint: normalized.endpoint, name,
+          expiresAt: result.expiresAt, intervalMs: Math.max(5000, result.intervalMs || 5000), challengeFingerprint: result.challengeFingerprint || '' };
+        pairingTimer = setTimeout(() => void pollPairing(epoch), state.pairing.intervalMs);
+        return true;
+      } catch (e) {
+        if (pendingId) { try { await api.remoteAgentCorePairCancel(pendingId); } catch {} }
+        if (epoch === pairingGeneration) state.error = safe(e); return false;
+      }
+      finally { if (epoch === pairingGeneration) state.pairingBusy = false; }
+    },
+    async openPairing() {
+      const pairing = state.pairing || state.pairingIssue;
+      if (!pairing) return false;
+      try { await api.openExternal(pairing.verificationUri); return true; }
+      catch (e) { state.error = safe(e); return false; }
+    },
+    async revoke(id) {
+      generation++; paused = true; stopRetry();
+      if (state.selectedProfileId === id) await controller.disconnect();
+      try {
+        await api.remoteAgentCoreRevoke(id);
+        if (state.selectedProfileId === id) { await controller.disconnect(); state.selectedProfileId = ''; }
+        await load(); return true;
+      } catch (e) { await load(); state.error = safe(e); return false; }
+    },
     stageQr(rawCode) {
       clearQr();
       const parsed = parseRemoteAgentQr(rawCode);
@@ -112,12 +240,12 @@ export function createRemoteAgentService(api) {
         state.error = safe(parsed.error);
         return false;
       }
-      if (!parsed.supported || parsed.adapter !== 'dsh') {
+      if (!parsed.supported) {
         state.pendingQr = { v: parsed.v, adapter: parsed.adapter, name: parsed.name, endpoint: parsed.endpoint, supported: false };
         state.error = parsed.adapter === 'bob-core' ? 'REMOTE_BOB_CORE_UNSUPPORTED' : 'REMOTE_UNSUPPORTED_ADAPTER';
         return true;
       }
-      qrToken = parsed.token;
+      qrToken = parsed.token || '';
       state.pendingQr = { v: parsed.v, adapter: parsed.adapter, name: parsed.name, endpoint: parsed.endpoint, supported: true };
       state.error = '';
       return true;
@@ -131,12 +259,12 @@ export function createRemoteAgentService(api) {
     async confirmQr(legacyPassword) {
       if (!state.pendingQr || connecting || disposed) return false;
       const { adapter, name, endpoint, supported } = state.pendingQr;
-      if (!supported || adapter !== 'dsh') {
+      if (!supported) {
         qrToken = '';
         state.error = adapter === 'bob-core' ? 'REMOTE_BOB_CORE_UNSUPPORTED' : 'REMOTE_UNSUPPORTED_ADAPTER';
         return false;
       }
-      if (!qrToken) {
+      if (adapter === 'dsh' && !qrToken) {
         clearQr();
         state.error = 'REMOTE_QR_MISSING_PARAM';
         return false;
@@ -148,13 +276,14 @@ export function createRemoteAgentService(api) {
           return false;
         }
       }
-      if (hasExistingEndpoint(endpoint)) {
+      if (hasExistingEndpoint(endpoint, adapter)) {
         clearQr();
         state.error = 'REMOTE_QR_OVERWRITE_BLOCKED';
         return false;
       }
       const token = qrToken;
       clearQr();
+      if (adapter === 'bob-core') return await service.beginPairing(endpoint, name);
       return await service.save({ adapter: 'dsh', endpoint, token }, name);
     },
     async unlock(legacyPassword) {
@@ -200,7 +329,7 @@ export function createRemoteAgentService(api) {
       } catch (e) { state.error = safe(e); }
     },
     async lock() {
-      generation++; paused = true; stopRetry(); clearQr(); await controller.disconnect();
+      generation++; paused = true; stopRetry(); clearQr(); await cancelPairing(); await controller.disconnect();
       try { await api.remoteAgentLock(); state.unlocked = false; state.profiles = []; state.selectedProfileId = ''; }
       catch (e) { state.error = safe(e); }
     },
@@ -225,7 +354,7 @@ export function createRemoteAgentService(api) {
       const ok = await controller.answer(id, answer); await load(); return ok;
     },
     cancel: () => controller.cancel(),
-    async dispose() { disposed = true; generation++; stopRetry(); clearQr(); await controller.dispose(); },
+    async dispose() { disposed = true; generation++; stopRetry(); clearQr(); await cancelPairing(); await controller.dispose(); },
   };
   return service;
 }

@@ -1595,6 +1595,13 @@ pub fn run() {
             remote_agent::remote_agent_live,
             remote_agent::remote_agent_action,
             remote_agent::remote_agent_disconnect,
+            remote_agent::remote_agent_core_pair_begin,
+            remote_agent::remote_agent_core_pair_poll,
+            remote_agent::remote_agent_core_pair_cancel,
+            remote_agent::remote_agent_core_revoke,
+            remote_agent::remote_agent_core_messages,
+            remote_agent::remote_agent_core_snapshot,
+            remote_agent::remote_agent_core_tasks,
             // 配置
             system_is_setup_complete,
             config_get,

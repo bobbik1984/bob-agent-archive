@@ -285,3 +285,73 @@ RH-00 只做最小公共契约，不建设通用调度平台。RH-02 是尽早�
 已只读检查 `cloud-agent` 当前阶段指向的工作树：其 AgentAdapter / RuntimeAdapter 与 Core 工作事实分离可作为设计参照；该工作树的 Remote DSH 路径为 SSH 启动隔离 CLI 任务（代码声明旧版 DSH 0.1.5-rc.3），不是接入 X1T 现有 rc.2 Web 会话。只复用抽象与状态语义，不直接跨项目 import 或复制整套运行器，不让 VPS3 成为 Bob 直连的强制依赖。
 
 `agent.bobbik.org` 公开页面本轮读取未成功，本地源码观察不代表该域名认证后实际功能已验证；没有操作线上服务、凭据、数据库或当前会话。
+
+<a id="work-desktop-parity-plan"></a>
+## 9. Work 桌面级远端开发体验：客户端开发计划
+
+修订：2026-10-27；来源为用户要求对 Online 和 bob-agent 分别制定开发任务。**新增切片是待实施规划，不是已实现、已发布或实施授权。** 沿用 RH-00～05；不另建 RH 总路线，也不改写第8节各冻结版本的历史验收。联合顺序和验收的唯一正文在 [Online CURRENT_STAGE](../../cloud-agent/docs/CURRENT_STAGE.md#remote-work-client-plan)。
+
+### 当前事实与产品边界
+
+本轮只读 HEAD `905becf` 加未提交 App.vue / WorkView.vue，未运行测试、安装包或真实连接验收。源码 RemoteAgentPanel 支持会话、文字、问答、审批、取消；remote-agent-service 提供应用级连接与有限重连，remote-agent-qr 仅开放 dsh。面板按纯文本显示，草稿 Map 属于组件内存；这不构成安全 Markdown、可交互成果、代码 Diff、持久草稿或跨重启完整对账。
+
+Bob App 可独立直连原生执行端；Online 是可选连接，不能变为所有用户必装后台。对于 Core 管理的项目，App 只缓存带来源/修订的投影和外部引用；对于直连 DSH，会话事实仍由 DSH 管理。切换连接不迁移运行会话，不把两种项目悄悄合并；Local Work 原有记录不能删除。Online 主控和 Runtime 由 Online 维护，App 不再实现其调度或工具循环。
+
+### 开发任务与准出标准
+
+斜杠后仅为既有 RH 工作切片；本节新增网页/代码子集不替代 RH-03 原 Blender 准出标准。
+
+| 既有归属 / 切片 | 具体交付与主要落点 | 前置 / 验收 |
+|---|---|---|
+| RH-00 / 共同契约 | 审计 src-tauri/src/remote_agent、Bridge、能力结构；与 Online 冻结 Connection/主体、Project 外部引用、Task/Execution/Artifact 关联、游标和错误映射；保留 DSH 私有协议在 Adapter 内 | 消费 Online R06-D 客户端契约；未知能力不展示可执行按钮；旧 DSH 夹具继续有效，不复制 Online DB/状态机 |
+| RH-01 / bob-core 原生连接 | 在 Rust 实现 Core 认证/兑换/撤销/能力/目录/历史，设置负责连接，Work 负责选择；用户凭据由本机系统保护，敏感网络请求经过 Bridge/Rust | 依赖 MWNP-01/Core；二维码过期/重放、跨主机跳转、主体越权、撤销及不支持版本拒绝；App 和网页各自认证，认证成功不自动发任务；不复制浏览器 Cookie 来绕过网关 |
+| RH-02 / 会话与恢复 | 支持经能力许可的新建/已有会话、完整分页、持久 requestId 对账与未知结果；按连接/会话持久保存草稿与阅读锚点，避免失效缓存覆盖新事件 | 后端支持查询/幂等时才自动收敛；PC 重开、断网、迟到回执、手机前后台均不重复发送；停止待确认不能显示已停；本地存储失败保留草稿并拒绝有副作用的盲发 |
+| RH-02 / 对话与决策呈现 | 改进 RemoteAgentPanel 与 WorkView：常显最终结论/限制/待决定事项，普通工具聚合；安全 Markdown/代码块；项目与原工作记录保留；支持有证据的 queue/steer 区分 | 只有执行器实际支持才开放运行中反馈；审批显示作用对象、范围和有效期；拒绝跨会话及过期回答；计时/continued 问题按既有 RH-02 待办补齐，不能自动回答 |
+| RH-03 / 网页代码成果子集 | 复用安全呈现组件：网页隔离预览、文档正文、图片、代码 Diff、检查/限制、受控下载；Artifact/父版本显式关联；“修改这版”输入携带版本引用 | 依赖 Online R05-A/E 或执行端真实文件接口；远端 HTML 无主站 Cookie/原生 Bridge，路径/链接有边界；页面预览不是浏览器验证；文件包与快照可核对；无成果不出假卡片 |
+| RH-03 / Work 关联与审阅 | 本地项目通过外部引用关联 Core 工作；清楚区分查看、批准工具、接受成果与提交/发布。历史版本只读保留，反馈目标不随最新版本变化 | 用户在 V1 阅读器提出反馈时 V2 即使已出现也不得改写目标；过期审阅由权威服务拒绝；不能把本地点击当远端已接受；原 Blender 下载/预览验收仍待独立完成 |
+| RH-04 / 双端体验与恢复验收 | Windows/Android 同源候选；布局适配、系统解锁、端点切换、草稿、键盘与焦点、历史长列表和阅读返回；证据按实际运行平台分类 | 依赖本批 RH-01/02/03 子集；按 Online 联合矩阵跑真实 V1→V2、客户端离开/回归、失败与恢复；模拟 390px 不能代替 Android 系统认证/杀进程真机测试；安装/发布另授权 |
+| RH-05 / 第二协议验证 | 将 bob-core 列为本轮候选第二 Adapter（规划建议，原 OpenClaw/Hermes 保留后续）；若最终选择其他受支持执行端，也必须复用同一界面与能力层 | DSH 与第二协议各自完成适用真实闭环才可称通用；不由二维码解析支持推断 Adapter 已可用；不自动扩展至 AGY 消费订阅包装或任意插件商店 |
+
+### 界面验收要求
+
+- 保留现有标题栏、Bob Logo、主题变量及中英字典。宽屏项目/会话侧栏可折叠，主区为连续对话；成果区按需展开，不默认常驻右栏。手机全屏阅读后恢复同一版本的草稿/位置/焦点，避免多层小滚动区。
+- 凭据不进入 Vue 持久存储；富文本与附件属于不可信内容。新阅读器不得为方便显示 HTML 而放开 Tauri Bridge、任意宿主文件或跨域认证转发。
+- 阶段、百分比、实际模型、停止确认和检查通过均由来源证据决定；不支持的操作明确降级，不能给静态假按钮。
+- 验证拆为协议测试、实际 Vue 交互、真实服务联调、PC/Android 安装和人工审阅。旧路线测试数不移用为本轮结果。
+
+### 顺序、回退与范围
+
+先 RH-00 与 Core 认证设计 → RH-01/Core 与 RH-02 恢复 → RH-02 呈现及 RH-03 网页代码 → RH-04 联合候选。协议冻结后纯客户端呈现可用契约夹具开发，但最终必须真实服务验收。RH-03 Blender/B4 仍独立暂缓，不阻塞已限定的网页代码子集，也不被该子集关闭。
+
+本轮仅文档规划；保持既有源码改动、用户数据和安装包。后续每个切片先冻结分支与回退点；适配器停用后仍可用原 DSH 与 Local Work；数据迁移必须先备份并验证恢复，不用删库/重装来解决问题。依赖、系统权限、构建、发布、服务改动和真实模型费用按具体授权执行。多人共享、完整 IDE、远程桌面系统、自动跨节点切换、全量记忆和多代理编排均后置。
+
+<a id="core-client-mapping-v1"></a>
+## 10. RH-00 / RH-01 共同契约第一步冻结（2026-10-27）
+
+状态：用户已授权继续实施；**Core只读Adapter、原生授权与实际Work接线已本地实现，未打包/发布**。服务端Wire仅维护在 [CURRENT_STAGE](../../cloud-agent/docs/CURRENT_STAGE.md#core-client-contract-v1)，认证唯一正文在 [原认证规范](../../cloud-agent/docs/wiki/vps3-web-auth.md#core-client-auth-v1)，本节仅维护客户端映射。RH-02～05及Blender原验收未完成。实现前审计见下节，当前增量与验证见本节末尾及[原RH证据](evidence/remote-agent/RH-01-native-read-preview.md#core-read-local)。
+
+### 实现前源码核对与纠正（历史基线，不是当前能力）
+
+- QR parser的known含Core，但supported仅DSH；JS service及Rust save/connect/reconnect均拒绝或固定DSH（`src/work/remote-agent-qr.js:7–8`、`remote-agent-service.js:108–183`、`src-tauri/src/remote_agent/mod.rs:18–96,190–248`）。不是打开一个按钮即可接Core。
+- Capabilities目前只有catalog/history/send/approvals/artifacts五bool；LiveState直接调用DSH历史投影并识别DSH帧（`live.rs:298,456–505`）。新Core必须独立翻译协议，不能制造假DSH事件。
+- 当前DSH导入Token会经过JS parser和service的qrToken闭包，再经Bridge交Rust；不能写成“所有凭据从未进入Vue/JS”。现保存Cookie/库密钥不返回Vue。新Core流程将verifier/长期bearer从生成、兑换到保存都限定Rust，JS只收非秘密状态、user_code和确认URL。
+- store Entry只有cookie且按endpoint覆盖（`store.rs:15–25,112–139`）；有限重连、uncertainSessions标记与内存cursor不是持久请求账本或完整断线重放。`reviewed()`清标记不等于服务端已对账。
+
+### 原生映射冻结
+
+| 客户端对象/动作 | Core映射及限制 |
+|---|---|
+| profileId | 本机配置ID；不替代principal或服务身份 |
+| connectionId/watchId | 当前连接/订阅代际句柄；重连后换代，迟到响应丢弃 |
+| RemoteRef | Core tagged ref保留server/principal/project/task原ID；DSH继续原workspace/session；项目级未分配Task消息不硬归类 |
+| 能力 | 服务声明∩资源授权∩客户端支持；未知默认关闭，旧五bool为兼容显示投影 |
+| 认证 | Core v2无秘密导入→Rust发起挑战→系统浏览器批准→Rust领取24小时凭据；不抄浏览器Cookie，不把Core bearer存DSH cookie字段 |
+| Vault | tagged `DshCookie` / `CoreCredential`，Core分支键含adapter/origin/server/principal；DshCookie保留旧profileId与endpoint/Cookie语义，不虚构Core身份，不因同origin合并；旧库迁移事务化，失败保留原字节与备份，不清库；Token不经普通同步 |
+| 对话恢复 | Core持久消息sequence分页＋事实快照，不声称全事件流；本地持久游标只在投影提交成功后推进；来源/主体/Task与代际隔离 |
+| 写入 | 发前在原生受保护outbox保存request_id、规范原payload及摘要直到对账终结；若仅保存摘要则只能查询，禁止从当前输入框重建原请求。断线先查原回执；查询not_found后才用原outbox同ID同payload重试；未知/撤销/解锁失败禁止盲发 |
+| 结果 | 原Execution、Artifact、Verification、Review分别呈现；父版与审批引用固定，取消受理不等于停止确认，acknowledged不自动译为已采用 |
+| 阅读器 | Rust受控下载，HTML隔离无Bridge/主站凭据，包内资源有边界；预览URL元数据不能当授权 |
+
+当前本地实现范围：RH-00能力/typed refs与RH-01/Core只读Adapter，配合MWNP-01本地Core HTTP夹具；已接入capabilities、授权项目、消息分页与Task快照，所有新写能力仍关闭。DSH保留独立路径。本轮24小时只读凭据是过渡实现，不替代既有设备身份规范中的长期设备密钥与轮换refresh；没有宣布长期认证方案完成。下一步补齐长期身份与整包/原生生命周期验收，再推进R06-D/RH-02操作账本与真实续改。
+
+2026-10-27专项结果：Rust实际模块与本地Core HTTP/Windows DPAPI共27/27；前端17文件120项通过；实际Vue浏览器覆盖390中文暗色、1280英文亮色及Core/DSH路径（原生Bridge为模拟）。范围和证据见[本地只读证据](evidence/remote-agent/RH-01-native-read-preview.md#core-read-local)。Rust测试剥离Tauri宏/AppHandle调度，不是整包验收；Android、生产Core及公网接入未验证。安装包、网关及数据库上线另走原门槛。X1T可达只允许继续旧B4只读恢复评估，不解锁Blender或替代DSH真机验收。

@@ -294,6 +294,7 @@ impl Dsh {
                     approvals: true,
                     artifacts: false,
                 },
+                core: None,
             },
             base,
             client,
@@ -587,6 +588,40 @@ pub(super) fn project_history(session_id: &str, value: &Value) -> Result<History
                     .unwrap_or(false)
             });
         }
+        if event["type"].as_str() == Some("deliverables/presented") {
+            let mut items = Vec::new();
+            if let Some(files) = event.pointer("/data/files").and_then(Value::as_array) {
+                for file in files.iter().take(24) {
+                    if let Some(path) = file["path"].as_str().filter(|p| !p.is_empty() && p.len() <= 1024) {
+                        let name = path.rsplit(['/', '\\']).next().unwrap_or(path).to_string();
+                        let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+                        let kind = match ext.as_str() {
+                            "md" | "markdown" | "txt" => "markdown",
+                            "csv" | "tsv" => "csv",
+                            "json" | "yaml" | "yml" | "toml" => "data",
+                            "py" | "js" | "ts" | "rs" | "sh" | "ovpn" | "html" | "css" => "code",
+                            _ => "file",
+                        }.to_string();
+                        let description = file["description"].as_str().filter(|d| !d.is_empty()).map(|d| d.chars().take(240).collect());
+                        items.push(ArtifactItem { path: path.to_string(), name, description, kind });
+                    }
+                }
+            }
+            if !items.is_empty() {
+                if let Some(last) = messages.last_mut().filter(|m| m.role == "assistant") {
+                    last.artifacts.extend(items);
+                } else {
+                    messages.push(HistoryMessage {
+                        id: event["seq"].to_string(),
+                        role: "assistant".into(),
+                        text: String::new(),
+                        artifacts: items,
+                        ..Default::default()
+                    });
+                }
+            }
+            continue;
+        }
         let role = match event["type"].as_str() {
             Some("user/message") => "user",
             Some("assistant/message") => "assistant",
@@ -595,8 +630,8 @@ pub(super) fn project_history(session_id: &str, value: &Value) -> Result<History
                 continue;
             }
         };
-        // Only explicit text content is projected. Tools, reasoning, attachments and arbitrary
-        // JSON never become local file links/HTML, and missing content is not invented.
+        // Only explicit text content and safe metadata are projected. Raw tool outputs, attachments
+        // and arbitrary JSON never become local file links/HTML, and missing content is not invented.
         let message = if role == "assistant" {
             &event["data"]["message"]
         } else {
@@ -612,20 +647,46 @@ pub(super) fn project_history(session_id: &str, value: &Value) -> Result<History
             continue;
         };
         let mut parts = Vec::new();
+        let mut reasoning_parts = Vec::new();
+        let mut tools = Vec::new();
         for part in content {
-            if part["type"] == "text" {
-                if let Some(text) = part["text"].as_str() {
-                    parts.push(text);
+            match part["type"].as_str() {
+                Some("text") => {
+                    if let Some(text) = part["text"].as_str() {
+                        parts.push(text);
+                    }
                 }
-            } else {
-                omitted += 1;
+                Some("reasoning") if role == "assistant" => {
+                    if let Some(text) = part["text"].as_str().filter(|t| !t.trim().is_empty()) {
+                        reasoning_parts.push(text);
+                    }
+                }
+                Some("tool-call") if role == "assistant" => {
+                    if let Some(name) = part["name"].as_str().or_else(|| part["toolName"].as_str()).filter(|n| !n.is_empty()) {
+                        let summary = part["arguments"].as_str()
+                            .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+                            .and_then(|args| {
+                                args["path"].as_str()
+                                    .or_else(|| args["command"].as_str())
+                                    .or_else(|| args["query"].as_str())
+                                    .map(|s| s.chars().take(120).collect::<String>())
+                            });
+                        tools.push(ToolCallItem { name: name.to_string(), summary });
+                    }
+                }
+                _ => {
+                    omitted += 1;
+                }
             }
         }
-        if !parts.is_empty() {
+        if !parts.is_empty() || !reasoning_parts.is_empty() || !tools.is_empty() {
             messages.push(HistoryMessage {
                 id: event["seq"].to_string(),
                 role: role.into(),
                 text: parts.join("\n"),
+                reasoning: if reasoning_parts.is_empty() { None } else { Some(reasoning_parts.join("\n")) },
+                tools,
+                artifacts: Vec::new(),
             });
         }
     }
