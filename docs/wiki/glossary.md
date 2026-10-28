@@ -9,8 +9,8 @@
 | **Bob（统一项目）** | 本仓库建设的统一个人助理 | — |
 | **旧 App / legacy-app** | `<workspace_root>/bob-agent`，Tauri 版 Bob 0.9.x | 本仓库目录同样叫 `bob-agent`，口头和文档里一律称“统一项目” |
 | **旧 Online / legacy-online** | `<workspace_root>/cloud-agent`，曾用名 Nexus、Bob Online、online-agent，包名 `antigravity-nexus`；生产实例部署在 Hostinger | 统一项目里的常开节点 `bob-node` |
-| **bob-kernel**（候选，BOB-D-005） | 统一项目唯一的领域内核 | 旧 App 的 Work Core（`APP`），旧 Online 的 Bob Core（`ONL`） |
-| **bob-node**（候选） | 内核的无界面部署形态，跑在常开设备上 | 旧 Online 服务器 |
+| **bob-kernel**（架构已接受，BOB-D-005；尚未实现） | 统一项目唯一的领域内核 | 旧 App 的 Work Core（`APP`），旧 Online 的 Bob Core（`ONL`） |
+| **bob-node**（已接受的部署形态；尚未实现） | 内核的无界面部署形态，跑在常开设备上 | 旧 Online 服务器 |
 | **Home（主权威）** | 某个用户数据的主权威内核实例 | 设备副本（Replica） |
 | **Replica（副本）** | 设备上的只读缓存加意图队列（outbox） | 第二份可写的真相 |
 

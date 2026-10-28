@@ -10,7 +10,7 @@ project:
   - Vue 3
   - Desktop
   - Android
-  current_task: '1.0.1 交接就绪：WP-00/WP-04 与 BOB-D-001..005/008 已完成并推上 GitHub；下一位 Agent 按 docs/CURRENT_STAGE.md 依次执行 WP-01 → WP-02 → WP-03 → BP2'
+  current_task: 'WP-01静态盘点完成；WP-02 Schema与Outbox设计草案完成，25项内存DDL约束通过；下一步WP-03，BP1未整体通过，BP2/构建/发布未开始'
   development_plan: docs/CURRENT_STAGE.md
 phases:
 - name: BP0 真相与保护
@@ -23,16 +23,16 @@ phases:
     status: done
   - text: WP-04 仓库初始化、legacy/v0.9 归档与 1.0.1 分支推送 GitHub
     status: done
-  - text: WP-01 盘点补全（同步引擎、Outbox、测试与 CI、secrets 扫描、实体与 API 清单）
-    status: active
+  - text: WP-01 静态深盘完成（同步/Outbox/凭据实现/表与API/测试CI统计；未跑旧测试或全历史secret扫描）
+    status: done
 - name: BP1 架构定案
   tasks:
   - text: BOB-D-004/005 确认：单一 Rust 内核，个人环境以 X1C 为 Home 主库
     status: done
   - text: BOB-D-008 确认：懒式响应 + 打字静默预热 + 单飞唤醒 + 本地 Outbox 必达契约
     status: done
-  - text: WP-02 单一内核同名实体语义对齐、SQLite Schema 与预热 Outbox 状态机设计
-    status: active
+  - text: WP-02 设计草案完成（31表、25项内存DDL约束；未实现，BP1待WP-03）
+    status: done
   - text: WP-03 连接定案、威胁模型与 BOB-D-006/007 裁决
     status: todo
 - name: BP2 骨架与契约

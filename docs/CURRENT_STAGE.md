@@ -2,7 +2,7 @@
 
 > 施工合同：现在做什么、下一项可派发工作是什么、验收标准是什么。修订：2026-10-28。
 > **当前版本与分支：`1.0.1`**（`main` 与 `1.0.1` 同步演进；旧版 v0.9.30 已归档至 `legacy/v0.9` 分支）。
-> **当前里程碑：BP0 收尾 → BP1 架构定案 → BP2 单一内核与预热发件箱骨架**
+> **当前里程碑：WP-01静态盘点已完成，WP-02设计草案与DDL检查已完成；下一步WP-03。BP1尚未整体通过，BP2未开始。**
 
 ---
 
@@ -21,7 +21,7 @@
    - **BOB-D-003（accepted）**：移动端为 Tauri Android，iOS 后期评估。
    - **BOB-D-004（accepted）**：优先搭建作者完整个人工作环境，**X1C 作为个人环境的 Home 主权威库**，手机作为 Replica。
    - **BOB-D-005（accepted）**：**单一 Rust 内核（`bob-kernel`）**，同时嵌入 Tauri Desktop、Tauri Android 与可选无头 `bob-node`；Harness 适配器走进程边界。
-   - **BOB-D-008（accepted）**：**懒式响应（Lazy Dormant Sync）+ 输入框聚焦/打字静默预热（Speculative Pre-Warm）+ 单飞唤醒复用（`inFlightWakeupPromise`）+ 本地持久化发件箱（Local-First Durable Outbox）**，保证非即时模式下发送信息 100% 不会因为连接状态而失败（审计报告见 [evidence/2026-10-28-lazy-send-audit.md](evidence/2026-10-28-lazy-send-audit.md)）。
+   - **BOB-D-008（accepted）**：**懒式响应（Lazy Dormant Sync）+ 输入框聚焦/打字静默预热（Speculative Pre-Warm）+ 单飞唤醒复用（`inFlightWakeupPromise`）+ 本地持久化发件箱（Local-First Durable Outbox）**，保证网络状态不阻塞本地持久接纳；远端接收/执行须各自有证据，永久离线或权限失效不承诺远端必达（审计报告见 [evidence/2026-10-28-lazy-send-audit.md](evidence/2026-10-28-lazy-send-audit.md)）。
 
 ---
 
@@ -29,9 +29,9 @@
 
 | 顺序 | 工作包 ID | 任务名称 | 当前状态 | 交付物位置 |
 |---|---|---|---|---|
-| **Step 1** | **WP-01** | 前身项目深度只读盘点补全 | **立即执行** | `docs/evidence/2026-10-28-wp01-deep-inventory.md`、`docs/COMPONENT_MAP.md` |
-| **Step 2** | **WP-02** | `bob-kernel` 单一内核 Schema 与懒式预热 Outbox 状态机定案 | **紧接 Step 1** | `docs/ARCHITECTURE.md`、`docs/wiki/kernel-schema.md` |
-| **Step 3** | **WP-03** | X1C Home ↔ Android 连接配置与安全威胁模型 | **紧接 Step 2** | `docs/wiki/connectivity.md`、`docs/wiki/threat-model.md`、`DECISIONS.md` |
+| **Step 1** | **WP-01** | 前身项目深度只读盘点补全 | **静态盘点完成**（不含旧测试执行/全历史secret扫描） | `docs/evidence/2026-10-28-wp01-deep-inventory.md`、`docs/COMPONENT_MAP.md` |
+| **Step 2** | **WP-02** | `bob-kernel` 单一内核 Schema 与懒式预热 Outbox 状态机定案 | **设计草案完成、25项DDL约束通过**；未实现 | `docs/ARCHITECTURE.md`、`docs/wiki/kernel-schema.md` |
+| **Step 3** | **WP-03** | X1C Home ↔ Android 连接配置与安全威胁模型 | **下一步**；连接/威胁模型仍待定案 | `docs/wiki/connectivity.md`、`docs/wiki/threat-model.md`、`DECISIONS.md` |
 | **Step 4** | **BP2-01** | 建立 `1.0.1` 代码工程骨架（Rust Workspace + Tauri v2 + Vue 3） | 待 BP1 文档定案且用户授权构建后执行 | `Cargo.toml`、`crates/bob-kernel/`、`apps/desktop-mobile/` |
 | **Step 5** | **BP2-02** | 实现 `BOB-D-008` 懒式响应、打字静默预热与本地 Durable Outbox 闭环 | 待 BP2-01 完成后执行 | `crates/bob-kernel/src/outbox/`、`src/work/` 契约测试 |
 
@@ -41,13 +41,13 @@
 
 1. **旧 App 同步与信任引擎审计**：
    - 读取 `<workspace_root>/bob-agent/src-tauri/src/sync_engine.rs`、`<workspace_root>/bob-agent/src-tauri/src/device_trust.rs`、`<workspace_root>/bob-agent/src-tauri/src/outbox.rs`。
-   - 梳理清楚：现有 SQLite 表清单、哪些表参与同步、现有的 `rpc_staged_outbox` / `peer_revocation_outbox` / `write_mobile_outbox` 表结构与幂等机制、哪些可直接复用到 `1.0.1` 的“X1C Home + 手机 Replica”架构中。
+   - 梳理清楚：现有 SQLite 表清单、哪些表参与同步、`rpc_staged_outbox` / `peer_revocation_outbox` 表结构及 `write_mobile_outbox` JSON命令的幂等差异（后者并非表）、哪些可直接复用到 `1.0.1` 的“X1C Home + 手机 Replica”架构中。
 2. **旧 Online（Bob Core）实体与治理状态机盘点**：
    - 读取 `<workspace_root>/cloud-agent/packages/shared/src/types.ts`、`<workspace_root>/cloud-agent/packages/server/src/db/` 及路由层。
    - 列出完整的表结构、状态流转（`Project`、`Task`、`Execution`、`Artifact`、`Verification`、`Review`）与 Harness Runner（DSH / AGY / Codex / Generic API）调用接口。
 3. **凭据存储与安全扫描**：
    - 检查旧 App `<workspace_root>/bob-agent/src-tauri/src/llm.rs` 与 `crypto.rs` 中 API Key 和设备私钥的存储方式（区分系统安全存储 vs 明文 `config.json`）。
-   - 统计两个旧仓库的测试文件数量与 CI 工作流状态（只统计不运行）。
+   - 统计两个旧仓库的测试文件数量与CI工作流定义（只统计不运行；不把定义存在写成远端CI通过）。
 4. **验收输出**：
    - 写入 `docs/evidence/2026-10-28-wp01-deep-inventory.md`，并更新 [COMPONENT_MAP.md](COMPONENT_MAP.md) 中的模块复用映射表。
 
@@ -56,6 +56,7 @@
 ### Step 2 — WP-02：`bob-kernel` 单一内核 Schema 与懒式预热 Outbox 状态机设计
 
 1. **同名实体统一 Schema（SQLite DDL 草案）**：
+   - 2026-10-28交付见 [kernel-schema](wiki/kernel-schema.md)，来源与验证见 [WP-01/02 Evidence](evidence/2026-10-28-wp01-deep-inventory.md)；31张草案表、25项内存DDL约束检查通过，不代表运行状态机/真机验证。
    - 将旧 App 的 `Conversation / Message / Capture / Memory / Goal / Milestone / Task / Decision / Artifact / Evidence` 与旧 Online 的 `Project / Task / Execution / Artifact(带版本) / Verification / Review` 合并为同一套无歧义的 SQLite 表结构：
      - 明确 `Goal/Milestone`（目标分组层）→ `Task`（用户事项层，唯一权威）→ `Execution`（单次模型/Harness 执行尝试，含 `requested / resolved / observed`）的三层关系。
 2. **`BOB-D-008` 懒式响应 + 打字预热 + 本地 Outbox 协议规范**：
@@ -100,3 +101,13 @@
 
 - **允许**：只读查阅 `<workspace_root>/bob-agent`、`<workspace_root>/cloud-agent` 与 Google Drive 文档；在本仓库编写文档、设计 Schema，并在获得对应阶段授权后编写 `1.0.1` 代码与测试；向 `origin` 的 `1.0.1` 与 `main` 分支提交并推送。
 - **禁止**：修改前身仓库的业务代码（除非用户专门要求给 `legacy/v0.9` 打热补丁）；在代码中硬编码 `bobbik.org`、IP 或任何密钥；未经用户确认执行耗时的全量打包编译。
+
+## 4 本轮交接（2026-10-28，WP-01 / WP-02）
+
+- 基线：1.0.1/main=`d842924`，接手干净；旧App=`a4ff5fd`，旧Online=`d14a527`，保留所有既有改动。
+- WP-01：48个旧App静态表、20个Online业务表+3个认证表，含同步范围、状态门、Runner差异、凭据风险与测试/CI口径；检查并归并审计中的四处发送漏洞。
+- WP-02：Schema与实体映射、Home两跳、首次离线接纳、workspace租约、预热/投递单飞、已证明未发与未知分界、持久接收回执、父版本/验证/人工审阅合同。文档设计自检完成，未将细节变更写成用户新决策。
+- 已通过：SQLite内存DDL及关系约束25项；旧系统测试、Rust状态机、磁盘崩溃恢复、手机真机、节点/模型/生产检查均未运行。具体范围及可复现脚本见Evidence。
+- 下一项：原WP-03。BOB-D-006/007仍proposed，许可证/文件级代码迁入清单、连接威胁模型与构建授权未满足，Step4/5不启动。新项目文档按BOB-D-004通过GitHub同步；未擅自建立Drive新镜像。
+- 进度投影经project_aligner的reviewed-patch生成：当前工具限定工作区内部路径，故在临时目录校验同一投影后按原文件hash比对写回本项目；不修改旧项目投影或全局注册表。
+- 回退：仅恢复本轮统一项目文档差异；没有旧仓库、数据库、凭据或生产变更要撤销。

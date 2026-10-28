@@ -10,8 +10,8 @@
 ## 核心待办队列（按里程碑）
 
 ### BP0 → BP1（架构与规格定案）
-- [ ] **WP-01**：完成旧 App（`sync_engine.rs` / `device_trust.rs` / `outbox.rs` / `llm.rs`）与旧 Online（实体、路由、Harness 接口）深度只读盘点，输出 `docs/evidence/2026-10-28-wp01-deep-inventory.md`
-- [ ] **WP-02**：完成 `bob-kernel` 单一内核 SQLite Schema 草案与 `BOB-D-008`（懒式响应 + 打字预热 + 本地 Durable Outbox）状态机规范，输出 `docs/wiki/kernel-schema.md`
+- [x] **WP-01**：静态深度盘点完成，见 [Evidence](docs/evidence/2026-10-28-wp01-deep-inventory.md)；旧测试/现场数据库/全历史secret扫描未运行
+- [x] **WP-02**：Schema/预热Outbox设计草案完成，见 [kernel-schema](docs/wiki/kernel-schema.md)；25项内存DDL约束通过，尚未实现，BP1定案仍需WP-03
 - [ ] **WP-03**：完成 X1C Home ↔ Android 连接 Provider 配置规范与远程文件/Harness 威胁模型，输出 `docs/wiki/threat-model.md`
 
 ### BP2 → BP3（1.0.1 骨架与个人工作环境 MVP）
