@@ -11,18 +11,36 @@ function endpointOrigin(value) {
 export function createRemoteAgentService(api) {
   const state = reactive({ connection: null, catalog: null, history: null, live: null,
     sessionId: '', busy: false, error: '', unlocked: false, profiles: [], selectedProfileId: '',
-    reconnecting: false, retries: 0, storageBusy: false, migrationRequired: false, pendingQr: null,
+    reconnecting: false, retries: 0, linkDormant: false, linkSmoothness: 'smooth', lastRttMs: 0,
+    storageBusy: false, migrationRequired: false, pendingQr: null,
     pairing: null, pairingIssue: null, pairingBusy: false, coreTasks: null, coreSnapshot: null, coreBusy: false, coreMoreBusy: false });
   let pairingTimer = null, pairingGeneration = 0;
   let coreEpoch = 0;
   function resetCore() { coreEpoch++; state.coreTasks = null; state.coreSnapshot = null; state.coreBusy = false; state.coreMoreBusy = false; }
   let retryTimer = null, generation = 0, connecting = false, paused = false, disposed = false, healthySince = 0, qrToken = '';
   const transient = new Set(['REMOTE_NETWORK', 'REMOTE_TIMEOUT', 'REMOTE_DISCONNECTED']);
+  const quiescent = new Set(['idle', 'completed', 'stopped', 'blocked', 'failed']);
   const safe = e => /^REMOTE_[A-Z_]+$/.test(String(e)) ? String(e) : 'REMOTE_UNKNOWN';
   const profile = () => state.profiles.find(p => p.id === state.selectedProfileId);
   const stopRetry = () => { clearTimeout(retryTimer); retryTimer = null; state.reconnecting = false; };
+  function canHibernateIdleSession() {
+    return Boolean(
+      state.connection
+      && state.history?.messages?.length > 0
+      && quiescent.has(state.live?.phase)
+      && (!state.live?.interactions || state.live.interactions.length === 0)
+    );
+  }
   function scheduleRetry() {
-    if (disposed || paused || connecting || state.actionBusy || retryTimer || !profile()?.autoReconnect || !transient.has(state.error) || state.retries >= 5) return;
+    if (disposed || paused || connecting || state.actionBusy || retryTimer || state.linkDormant || !profile()?.autoReconnect || !transient.has(state.error)) return;
+    if (canHibernateIdleSession()) {
+      state.linkDormant = true;
+      state.linkSmoothness = 'long-haul';
+      state.error = '';
+      state.reconnecting = false;
+      return;
+    }
+    if (state.retries >= 5) return;
     state.reconnecting = true;
     retryTimer = setTimeout(() => {
       retryTimer = null; state.retries++;
@@ -30,8 +48,12 @@ export function createRemoteAgentService(api) {
     }, Math.min(16000, 1000 * 2 ** state.retries));
   }
   const controller = createRemoteAgentController(api, patch => {
-    if ('connection' in patch) resetCore();
+    if ('connection' in patch && !patch.connection) resetCore();
     Object.assign(state, patch);
+    if (patch.linkDormant) {
+      stopRetry();
+      return;
+    }
     // A socket that opens and immediately fails must not reset the retry budget.
     if (state.error || !state.live?.ready) healthySince = 0;
     else if (!healthySince) healthySince = Date.now();
@@ -42,33 +64,49 @@ export function createRemoteAgentService(api) {
     try { Object.assign(state, await api.remoteAgentProfiles()); return true; }
     catch (e) { state.error = safe(e); return false; }
   }
-  async function connectProfile(id, retry = false) {
+  async function connectProfile(id, retry = false, options = {}) {
     if (connecting || disposed) return false;
     stopRetry(); paused = false;
     if (!retry) state.retries = 0;
     const current = ++generation; connecting = true;
+    const preserveView = Boolean(options.preserveView ?? (retry && state.history && state.sessionId && state.selectedProfileId === id));
+    const useCachedCatalog = Boolean(options.useCachedCatalog && state.catalog && state.selectedProfileId === id);
     state.selectedProfileId = id;
+    const t0 = Date.now();
     try {
-      const ok = await controller.connect(null, () => api.remoteAgentReconnect(id));
+      const ok = await controller.connect(null, () => api.remoteAgentReconnect(id), {
+        preservePreviousOnError: retry || preserveView,
+        preserveView,
+        cachedCatalog: useCachedCatalog ? state.catalog : null,
+      });
       if (current !== generation) return false;
+      const rtt = Date.now() - t0;
+      state.lastRttMs = rtt;
+      if (rtt > 600 || retry) state.linkSmoothness = 'long-haul';
       await load();
-      if (ok) {
-        const sessionId = profile()?.sessionId;
-        if (sessionId && state.catalog?.sessions.some(s => s.sessionId === sessionId)) await select(sessionId);
+      if (ok && !options.skipAutoSelect) {
+        const sessionId = state.sessionId || profile()?.sessionId;
+        if (sessionId && state.catalog?.sessions.some(s => s.sessionId === sessionId)) {
+          await select(sessionId, { preserveView });
+        }
       }
       return ok;
     } finally { connecting = false; if (current === generation) scheduleRetry(); }
   }
-  async function select(id) {
-    resetCore();
-    if ((!state.connection || state.live?.ready === false) && state.selectedProfileId && !connecting) {
-      const ok = await connectProfile(state.selectedProfileId);
+  async function select(id, options = {}) {
+    if (state.sessionId !== id) resetCore();
+    if ((!state.connection || state.live?.ready === false || state.linkDormant) && state.selectedProfileId && !connecting) {
+      const ok = await connectProfile(state.selectedProfileId, true, {
+        skipAutoSelect: true,
+        preserveView: Boolean(state.history?.sessionId === id),
+        useCachedCatalog: Boolean(state.catalog),
+      });
       if (!ok) return;
     }
     const current = generation, selectedProfileId = state.selectedProfileId;
-    await controller.select(id);
+    await controller.select(id, options);
     if (current === generation && state.history?.sessionId === id && state.connection?.adapter === 'bob-core') await loadCoreTasks();
-    if (current === generation && state.history?.sessionId === id && selectedProfileId) {
+    if (current === generation && state.history?.sessionId === id && selectedProfileId && profile()?.sessionId !== id) {
       try { await api.remoteAgentProfileUpdate(selectedProfileId, { sessionId: id }); await load(); }
       catch (e) { state.error = safe(e); }
     }
@@ -184,8 +222,8 @@ export function createRemoteAgentService(api) {
       finally { if (epoch === coreEpoch) state.coreBusy = false; }
     },
     async refresh() {
-      if ((!state.connection || state.live?.ready === false) && state.selectedProfileId && !connecting) {
-        return await connectProfile(state.selectedProfileId);
+      if ((!state.connection || state.live?.ready === false || state.linkDormant) && state.selectedProfileId && !connecting) {
+        return await connectProfile(state.selectedProfileId, true, { preserveView: true });
       }
       return await controller.refresh();
     },
@@ -340,11 +378,15 @@ export function createRemoteAgentService(api) {
     },
     async send(text, id) {
       if (service.needsReview()) return false;
-      if ((!state.connection || state.live?.ready === false) && state.selectedProfileId && !connecting) {
+      if ((!state.connection || state.live?.ready === false || state.linkDormant) && state.selectedProfileId && !connecting) {
         const currentSession = state.sessionId;
-        const restored = await connectProfile(state.selectedProfileId);
+        const restored = await connectProfile(state.selectedProfileId, true, {
+          skipAutoSelect: true,
+          preserveView: true,
+          useCachedCatalog: Boolean(state.catalog),
+        });
         if (!restored) return false;
-        if (currentSession && state.sessionId !== currentSession) await controller.select(currentSession);
+        if (currentSession) await controller.select(currentSession, { preserveView: true });
         if (service.needsReview()) return false;
       }
       const ok = await controller.send(text, id); await load(); return ok;

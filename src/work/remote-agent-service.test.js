@@ -352,4 +352,43 @@ describe('saved connections and safe reconnect', () => {
     expect(JSON.stringify(service.state)).not.toContain('synth-cancel-token');
     await service.dispose();
   });
+
+  it('enters lazy dormant standby on long-haul tunnel idle drop without flashing errors, and wakes on demand when sending', async () => {
+    vi.useFakeTimers();
+    const { api, service } = fixture();
+    const populatedLive = {
+      watchId: 'w1',
+      sessionId: 's1',
+      phase: 'completed',
+      ready: true,
+      messages: [{ id: '1', role: 'assistant', text: 'Audit complete' }],
+      interactions: [],
+    };
+    api.remoteAgentWatch.mockResolvedValue(populatedLive);
+    api.remoteAgentLive.mockResolvedValue(populatedLive);
+    await service.resume();
+    expect(service.state.history.messages).toHaveLength(1);
+    expect(service.state.linkDormant).toBe(false);
+
+    // Simulate cross-tunnel idle WebSocket drop while session is quiescent
+    api.remoteAgentLive.mockRejectedValueOnce('REMOTE_DISCONNECTED');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(service.state.linkDormant).toBe(true);
+    expect(service.state.linkSmoothness).toBe('long-haul');
+    expect(service.state.error).toBe('');
+    expect(service.state.reconnecting).toBe(false);
+    expect(service.state.history.messages).toHaveLength(1);
+    // No background reconnect storm while idle
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(api.remoteAgentReconnect).toHaveBeenCalledTimes(1);
+
+    // User sends a new message -> wakes up link on-demand using cached catalog and dispatches prompt
+    api.remoteAgentAction.mockResolvedValue({ ...populatedLive, phase: 'accepted' });
+    expect(await service.send('run follow-up check', 'req-lazy-1')).toBe(true);
+    expect(api.remoteAgentReconnect).toHaveBeenCalledTimes(2);
+    expect(api.remoteAgentCatalog).toHaveBeenCalledTimes(1);
+    expect(api.remoteAgentAction).toHaveBeenCalledTimes(1);
+    expect(service.state.linkDormant).toBe(false);
+    await service.dispose();
+  });
 });

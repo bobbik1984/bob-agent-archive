@@ -123,9 +123,9 @@
           <div class="topbar-subtitle">
             <span class="status-dot" :class="connectionStatusClass"></span>
             <span>{{ activeNodeLabel }}</span>
-            <template v-if="state.live?.phase">
+            <template v-if="displayPhase">
               <span>·</span>
-              <span>{{ t(`remote_agent.phase_${state.live.phase}`) }}</span>
+              <span>{{ t(`remote_agent.phase_${displayPhase}`) }}</span>
             </template>
           </div>
         </div>
@@ -154,8 +154,8 @@
         </div>
       </header>
 
-      <!-- Error / Status Banner -->
-      <div v-if="state.error" class="remote-error-banner" role="alert">
+      <!-- Error / Status Banner (Transient tunnel idle drops are suppressed in lazy mode) -->
+      <div v-if="visibleError" class="remote-error-banner" role="alert">
         <span>{{ t(`remote_agent.errors.${knownError}`) }}</span>
         <button v-if="state.selectedProfileId && !state.busy" type="button" @click="controller.connectProfile(state.selectedProfileId)">
           {{ t('remote_agent.retry') }}
@@ -550,9 +550,39 @@ watch(() => state.live?.watchId, () => {
   for (const field of Object.keys(answers)) delete answers[field];
 });
 
+const TRANSIENT_TUNNEL_ERRORS = new Set(['REMOTE_TIMEOUT', 'REMOTE_DISCONNECTED', 'REMOTE_NETWORK']);
+
+const visibleError = computed(() => {
+  if (!state.error) return '';
+  if (state.linkDormant || state.reconnecting) {
+    if (TRANSIENT_TUNNEL_ERRORS.has(state.error)) return '';
+  }
+  if (
+    TRANSIENT_TUNNEL_ERRORS.has(state.error)
+    && state.connection
+    && (state.history?.messages?.length || 0) > 0
+  ) {
+    return '';
+  }
+  return state.error;
+});
+
+const displayPhase = computed(() => {
+  const raw = state.live?.phase;
+  if (!raw) return '';
+  if (raw === 'unknown' && state.connection && (state.history?.messages?.length || 0) > 0) {
+    return 'idle';
+  }
+  return raw;
+});
+
 const canSend = computed(() => (
-  state.live?.ready && !state.error && !state.actionBusy && !controller.needsReview()
-  && ['idle', 'completed', 'stopped', 'blocked', 'failed'].includes(state.live.phase)
+  Boolean(state.connection)
+  && (state.live?.ready || state.linkDormant || (state.history?.messages?.length || 0) > 0)
+  && !visibleError.value
+  && !state.actionBusy
+  && !controller.needsReview()
+  && ['idle', 'completed', 'stopped', 'blocked', 'failed', 'unknown'].includes(state.live?.phase || 'idle')
 ));
 
 const canAnswer = item => (

@@ -14,7 +14,7 @@ use tokio_tungstenite::tungstenite::{
 };
 
 const LIMIT: usize = 4 * 1024 * 1024;
-const TIMEOUT: Duration = Duration::from_secs(15);
+const TIMEOUT: Duration = Duration::from_secs(35);
 const PROTOCOL: &str = "REMOTE_PROTOCOL";
 type Reply = oneshot::Sender<Result<Value, String>>;
 enum Command {
@@ -42,6 +42,7 @@ pub struct Dsh {
     abort: tokio::task::AbortHandle,
     state: Arc<std::sync::Mutex<super::live::LiveState>>,
     action_lock: Mutex<()>,
+    cached_workspaces: Mutex<Option<Vec<RemoteWorkspace>>>,
 }
 
 fn endpoint(input: &str, token: &str) -> Result<(Url, String), String> {
@@ -304,6 +305,7 @@ impl Dsh {
             abort: task.abort_handle(),
             state,
             action_lock: Mutex::new(()),
+            cached_workspaces: Mutex::new(None),
         };
         // A socket is not an answerer. Wait for the generation-bound $events ready frame.
         let (reply, response) = oneshot::channel();
@@ -322,7 +324,8 @@ impl Dsh {
         if ready["type"] != "ready" {
             return Err(PROTOCOL.into());
         }
-        adapter.workspaces().await?;
+        let initial_workspaces = adapter.workspaces().await?;
+        *adapter.cached_workspaces.lock().await = Some(initial_workspaces);
         Ok(adapter)
     }
 
@@ -442,8 +445,16 @@ impl RemoteAgent for Dsh {
     }
     fn catalog(&self) -> BoxFuture<'_, Result<Catalog, String>> {
         Box::pin(async {
+            if !self.alive.load(Ordering::Acquire) {
+                return Err("REMOTE_DISCONNECTED".into());
+            }
+            let cached = self.cached_workspaces.lock().await.take();
+            let workspaces = match cached {
+                Some(ws) => ws,
+                None => self.workspaces().await?,
+            };
             Ok(Catalog {
-                workspaces: self.workspaces().await?,
+                workspaces,
                 sessions: self.list().await?,
             })
         })
@@ -471,6 +482,12 @@ impl RemoteAgent for Dsh {
                 .map_err(|_| "REMOTE_DISCONNECTED")?;
             match tokio::time::timeout(TIMEOUT, response).await {
                 Ok(Ok(Ok(_))) => self.live(&id),
+                Err(_) => {
+                    if self.commands.try_send(Command::Cancel(id)).is_err() {
+                        self.close();
+                    }
+                    Err("REMOTE_TIMEOUT".into())
+                }
                 _ => {
                     self.close();
                     Err("REMOTE_DISCONNECTED".into())

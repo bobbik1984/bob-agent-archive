@@ -1,3 +1,6 @@
+const QUIESCENT_PHASES = new Set(['idle', 'completed', 'stopped', 'blocked', 'failed']);
+const TRANSIENT_LINK_ERRORS = new Set(['REMOTE_DISCONNECTED', 'REMOTE_TIMEOUT', 'REMOTE_NETWORK']);
+
 // Adapter-neutral connection controller; the application service owns its lifetime.
 export function createRemoteAgentController(api, publish) {
   let generation = 0;
@@ -8,16 +11,55 @@ export function createRemoteAgentController(api, publish) {
   let timer = null;
   let actionBusy = false;
   let pollEpoch = 0;
-  const stopPolling = () => { clearTimeout(timer); timer = null; ++pollEpoch; live = null; };
+  const stopPolling = (keepLive = false) => {
+    clearTimeout(timer);
+    timer = null;
+    ++pollEpoch;
+    if (!keepLive) live = null;
+  };
   const update = patch => { if (!disposed) publish(patch); };
   const close = info => info && api.remoteAgentDisconnect(info.connectionId).catch(() => {});
   const safeError = error => {
     const code = String(error);
     return /^REMOTE_[A-Z_]+$/.test(code) ? code : 'REMOTE_UNKNOWN';
   };
+  const canEnterLazyDormant = (previous, incomingError) => (
+    Boolean(previous && Array.isArray(previous.messages) && previous.messages.length > 0)
+    && QUIESCENT_PHASES.has(previous.phase)
+    && (!Array.isArray(previous.interactions) || previous.interactions.length === 0)
+    && TRANSIENT_LINK_ERRORS.has(incomingError)
+  );
+  const nextPollInterval = currentLive => (
+    currentLive && Array.isArray(currentLive.messages) && currentLive.messages.length > 0
+      && QUIESCENT_PHASES.has(currentLive.phase)
+      && (!Array.isArray(currentLive.interactions) || currentLive.interactions.length === 0)
+      ? 1500
+      : 250
+  );
   const publishLive = value => {
+    if (!value.ready && canEnterLazyDormant(live, value.error)) {
+      live = { ...live, ready: true, error: null };
+      update({
+        live,
+        linkDormant: true,
+        linkSmoothness: 'long-haul',
+        error: '',
+      });
+      return false;
+    }
     live = value;
-    update({ live: value, history: { sessionId: value.sessionId, messages: value.messages, hasMore: value.hasMore, omittedRecords: value.omittedRecords }, error: value.error || '' });
+    update({
+      live: value,
+      linkDormant: false,
+      history: {
+        sessionId: value.sessionId,
+        messages: value.messages,
+        hasMore: value.hasMore,
+        omittedRecords: value.omittedRecords,
+      },
+      error: value.error || '',
+    });
+    return Boolean(value.ready);
   };
   const poll = async (current, ticket) => {
     if (disposed || generation !== current || selection !== ticket || !live) return;
@@ -26,16 +68,17 @@ export function createRemoteAgentController(api, publish) {
       if (!actionBusy) {
         const value = await api.remoteAgentLive(connection.connectionId, live.watchId);
         if (generation !== current || selection !== ticket || disposed || epoch !== pollEpoch) return;
-        publishLive(value);
-        if (!value.ready) return;
+        const shouldContinue = publishLive(value);
+        if (!shouldContinue) return;
       }
     } catch (error) {
       if (generation === current && selection === ticket && epoch === pollEpoch) {
-        publishLive({ ...live, ready: false, phase: 'unknown', error: safeError(error), interactions: [] });
+        const code = safeError(error);
+        publishLive({ ...live, ready: false, phase: 'unknown', error: code, interactions: [] });
       }
       return;
     }
-    timer = setTimeout(() => void poll(current, ticket), 250);
+    timer = setTimeout(() => void poll(current, ticket), nextPollInterval(live));
   };
   const action = async input => {
     if (!connection || !live?.ready || actionBusy || disposed) return false;
@@ -65,17 +108,18 @@ export function createRemoteAgentController(api, publish) {
   return {
     async connect(input, open = () => api.remoteAgentConnect(input), options = {}) {
       const current = ++generation;
-      const keepPrevious = Boolean(options?.preservePreviousOnError && connection);
+      const keepPrevious = Boolean((options?.preservePreviousOnError || options?.preserveView) && connection);
+      const keepView = Boolean(options?.preserveView);
       const previous = connection;
       if (keepPrevious) {
-        update({ busy: true, error: '' });
+        update({ busy: !keepView, error: '' });
       } else {
         stopPolling();
         ++selection;
         connection = null;
         await close(previous);
         if (disposed || current !== generation) return;
-        update({ connection: null, catalog: null, history: null, live: null, sessionId: '', busy: true, error: '' });
+        update({ connection: null, catalog: null, history: null, live: null, sessionId: '', linkDormant: false, busy: true, error: '' });
       }
       let opened;
       try {
@@ -83,16 +127,20 @@ export function createRemoteAgentController(api, publish) {
         // The caller clears the input immediately; never copy it into controller state.
         if (disposed || current !== generation) { await close(opened); return; }
         if (opened.capabilities?.catalog !== true) throw 'REMOTE_UNSUPPORTED_CAPABILITY';
-        const catalog = await api.remoteAgentCatalog(opened.connectionId);
+        const catalog = options?.cachedCatalog || await api.remoteAgentCatalog(opened.connectionId);
         if (disposed || current !== generation) { await close(opened); return; }
         if (keepPrevious) {
-          stopPolling();
+          stopPolling(keepView);
           ++selection;
           if (previous && previous.connectionId !== opened.connectionId) await close(previous);
           if (disposed || current !== generation) { await close(opened); return; }
         }
         connection = opened;
-        update({ connection, catalog, history: null, live: null, sessionId: '', busy: false, error: '' });
+        if (keepView) {
+          update({ connection, catalog, linkDormant: false, busy: false, error: '' });
+        } else {
+          update({ connection, catalog, history: null, live: null, sessionId: '', linkDormant: false, busy: false, error: '' });
+        }
         return true;
       } catch (error) {
         await close(opened);
@@ -111,7 +159,7 @@ export function createRemoteAgentController(api, publish) {
         if (current === generation) update({ busy: false, error: safeError(error) });
       }
     },
-    async select(sessionId) {
+    async select(sessionId, options = {}) {
       if (!connection || disposed) return;
       if (connection.capabilities?.history !== true) {
         update({ error: 'REMOTE_UNSUPPORTED_CAPABILITY' });
@@ -119,14 +167,22 @@ export function createRemoteAgentController(api, publish) {
       }
       const current = generation;
       const ticket = ++selection;
-      stopPolling();
-      update({ history: null, live: null, sessionId, historyBusy: true, error: '' });
+      const keepView = Boolean(options?.preserveView || (live && live.sessionId === sessionId && live.messages?.length > 0));
+      stopPolling(keepView);
+      if (keepView) {
+        update({ sessionId, historyBusy: true, linkDormant: false, error: '' });
+      } else {
+        update({ history: null, live: null, sessionId, historyBusy: true, linkDormant: false, error: '' });
+      }
       try {
         if (connection.capabilities?.send === true) {
           const value = await api.remoteAgentWatch(connection.connectionId, sessionId);
           if (current === generation && ticket === selection && !disposed) {
-            publishLive(value); update({ historyBusy: false });
-            timer = setTimeout(() => void poll(current, ticket), 250);
+            const shouldPoll = publishLive(value);
+            update({ historyBusy: false });
+            if (shouldPoll) {
+              timer = setTimeout(() => void poll(current, ticket), nextPollInterval(value));
+            }
           }
           return;
         }
@@ -135,7 +191,14 @@ export function createRemoteAgentController(api, publish) {
           : await api.remoteAgentHistory(connection.connectionId, sessionId);
         if (current === generation && ticket === selection) update({ history, historyBusy: false });
       } catch (error) {
-        if (current === generation && ticket === selection) update({ historyBusy: false, error: safeError(error) });
+        if (current === generation && ticket === selection) {
+          const code = safeError(error);
+          if (keepView && canEnterLazyDormant(live, code)) {
+            update({ historyBusy: false, linkDormant: true, linkSmoothness: 'long-haul', error: '' });
+          } else {
+            update({ historyBusy: false, error: code });
+          }
+        }
       }
     },
     send(text, requestId) { return action({ kind: 'send', text, requestId }); },
