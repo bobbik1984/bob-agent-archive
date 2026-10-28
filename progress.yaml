@@ -10,7 +10,7 @@ project:
   - Vue 3
   - Desktop
   - Android
-  current_task: '1.0.1 (BP0→BP1)：旧版已归档至 legacy/v0.9，BOB-D-008（懒式响应与非即时发送必达契约）已确认；下一步推进 WP-01/WP-02 内核与 Outbox 状态机设计'
+  current_task: '1.0.1 交接就绪：WP-00/WP-04 与 BOB-D-001..005/008 已完成并推上 GitHub；下一位 Agent 按 docs/CURRENT_STAGE.md 依次执行 WP-01 → WP-02 → WP-03 → BP2'
   development_plan: docs/CURRENT_STAGE.md
 phases:
 - name: BP0 真相与保护
@@ -21,19 +21,29 @@ phases:
     status: done
   - text: WP-00 前身项目保护基线（bundle + diff + untracked，已验证）
     status: done
-  - text: WP-01 盘点补全（同步引擎、测试与 CI、secrets 扫描、实体与 API 清单）
+  - text: WP-04 仓库初始化、legacy/v0.9 归档与 1.0.1 分支推送 GitHub
+    status: done
+  - text: WP-01 盘点补全（同步引擎、Outbox、测试与 CI、secrets 扫描、实体与 API 清单）
     status: active
 - name: BP1 架构定案
   tasks:
   - text: BOB-D-004/005 确认：单一 Rust 内核，个人环境以 X1C 为 Home 主库
     status: done
-  - text: WP-02 单一内核同名实体语义对齐与模块范围
+  - text: BOB-D-008 确认：懒式响应 + 打字静默预热 + 单飞唤醒 + 本地 Outbox 必达契约
+    status: done
+  - text: WP-02 单一内核同名实体语义对齐、SQLite Schema 与预热 Outbox 状态机设计
     status: active
-  - text: WP-03 连接定案、威胁模型与 BOB-D-006 裁决
+  - text: WP-03 连接定案、威胁模型与 BOB-D-006/007 裁决
     status: todo
-  - text: WP-04 仓库初始化（本地 Git 与 registry 已完成，待绑定 GitHub 远端）
-    status: active
 - name: BP2 骨架与契约
-  tasks: []
+  tasks:
+  - text: BP2-01 建立 1.0.1 Rust Workspace (bob-kernel) + Tauri v2 + Vue 3 骨架
+    status: todo
+  - text: BP2-02 落地 BOB-D-008 懒式响应、输入框打字预热与本地 Durable Outbox 闭环及测试
+    status: todo
 - name: BP3 个人环境 MVP
-  tasks: []
+  tasks:
+  - text: BP3-01 X1C Home ↔ Android Replica 核心同步与远程文件只读浏览
+    status: todo
+  - text: BP3-02 接入 Harness Runner 进程边界并在统一 UI 跑通任务治理闭环
+    status: todo
