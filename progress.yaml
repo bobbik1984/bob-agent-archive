@@ -10,7 +10,7 @@ project:
   - Vue 3
   - Desktop
   - Android
-  current_task: WP-03设计获批；BP2-01/02新写内核与输入控制器进行中，6项Node测试通过；Rust编译/IPC/真实连接未验证
+  current_task: BP2-01/02进行中；Windows离线内核9项和Node控制器6项通过；下一项共享异步唤醒/Home接收/dispatcher，IPC和真实连接未验证
   development_plan: docs/CURRENT_STAGE.md
 phases:
 - name: BP0 真相与保护

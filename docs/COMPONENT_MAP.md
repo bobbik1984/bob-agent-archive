@@ -59,6 +59,6 @@
 
 ## 1.0.1 新写源码落点（2026-10-28）
 
-- `Cargo.toml`、`crates/bob-kernel/`：持久消息/Outbox、迁移、预热纯状态机；Rust测试尚未执行。
+- `Cargo.toml`、`crates/bob-kernel/`：持久消息/Outbox、迁移、预热纯状态机；Windows离线内核9项测试通过；Unix/真实Provider未验证。
 - `apps/bob-app/src/send-controller.mjs`：输入框本地保存确认控制器；注入bridge，尚无Tauri/Provider接线。
 - `apps/bob-app/tests/send-controller.test.mjs`：6项本地模拟bridge测试，不证明真实内核IPC或网络。

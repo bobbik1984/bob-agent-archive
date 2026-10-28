@@ -2,7 +2,7 @@
 
 > 施工合同：现在做什么、下一项可派发工作是什么、验收标准是什么。修订：2026-10-28。
 > **当前版本与分支：`1.0.1`**（`main` 与 `1.0.1` 同步演进；旧版 v0.9.30 已归档至 `legacy/v0.9` 分支）。
-> **当前里程碑：WP-03连接/威胁模型设计获批；BP2-01/02开始新写源码。轻量控制器6项测试通过，Rust编译、Tauri接线、真实连接未验证。**
+> **当前里程碑：WP-03连接/威胁模型设计获批；BP2-01/02开始新写源码。轻量控制器6项测试通过；Windows离线内核9项测试通过（含独立进程强制中断恢复），Tauri接线、真实连接未验证。**
 
 ---
 
@@ -114,17 +114,17 @@
 
 ## 5 当前执行：WP-03获批，BP2-01/02源码实现
 
-用户2026-10-28确认connectivity与threat-model两份文档并要求连续推进。BOB-D-006设计接受；BOB-D-007是否添加Drive只读镜像仍未决，不阻塞内核实现。未授权安装依赖、构建、现场密钥/网络操作或发布。
+用户2026-10-28确认connectivity与threat-model两份文档并要求连续推进。BOB-D-006设计接受；BOB-D-007是否添加Drive只读镜像仍未决，不阻塞内核实现。用户随后批准离线内核编译测试及修复；未授权联网安装依赖、Tauri打包、现场密钥/网络操作或发布。
 
 - 新写Cargo workspace和bob-kernel：从本项目Schema提取迁移，持久SQLite Outbox、本地消息事务、请求身份冲突、发送模糊边界、Home回执与纯预热状态机。没有复制legacy业务源码。
 - 新写App发送控制器与6项Node内置测试：本地确认才清草稿、等待期间输入保护、重复点击合并、IPC不确定重试同ID。6/6通过，但bridge为测试替身，没有Tauri/Rust端到端。
-- 内核Rust测试已编写，尚未编译运行；磁盘持久性/进程锁/恢复和预热语义不能按源码直接标通过。源码与边界见[BP2 Evidence](evidence/2026-10-28-bp2-source.md)。
+- 内核Rust离线编译成功，Windows适用9项测试通过；包含磁盘重开、锁竞争、独立子进程强制退出后的unknown恢复与禁止重派。Unix链接用例未运行；无真实网络/模型。源码与边界见[BP2 Evidence](evidence/2026-10-28-bp2-source.md)。
 - 当前只包含Rust workspace及App控制器；Vue/Tauri壳、IPC、真实异步共享等待、认证Provider、Home Inbox消费及control lane尚未实现。BP2-01/02保持进行中。
 
 ### 下一执行顺序与门槛
 
-1. 获批后运行`cargo test --offline -p bob-kernel`；设置外置`CARGO_TARGET_DIR`与`CARGO_BUILD_BUILD_DIR`。只编译本内核及测试，不做release/Tauri打包、不联网补依赖。缺缓存时给出具体缺项，不自动下载。
-2. 修复测试暴露问题，再接共享异步唤醒、Home接收事务和有界dispatcher；补控制消息不被未知普通发送堵塞的测试。
+1. 已按授权完成`cargo test --offline --locked -p bob-kernel`，产物位于仓库外；新增Cargo.lock固定本次解析。9项通过，1项默认ignored为被父测试显式调用的子进程夹具，不计额外独立通过项。未运行Unix专属用例。
+2. 下一项接共享异步唤醒、Home接收事务和有界dispatcher；补控制消息不被未知普通发送堵塞的测试。
 3. 建立Vue/Tauri壳和IPC，接入同一内核。安装依赖与构建另按具体命令批准；UI必须展示本地保存/等待Home/已接收的真实区别。
 4. 接经授权的Provider和配对流程，再验证真实PC/手机；不把模拟bridge或设计威胁模型当作设备连通、安全或发送必达证明。
 

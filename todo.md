@@ -20,7 +20,7 @@
 - [ ] **BP3-01**：打通 X1C Home 主库 ↔ 手机 Tauri Android Replica 的会话、捕获、待办与远程文件只读浏览（F4）
 - [ ] **BP3-02**：通过进程边界接入 Harness Runner（DSH / AGY / Codex / Generic API），在统一 UI 中跑通 Task → Execution → Artifact 预览与 Review 闭环
 
-首段源码与6项模拟bridge检查见[BP2 Evidence](docs/evidence/2026-10-28-bp2-source.md)；Rust编译、Vue/Tauri壳与真实连接尚未完成。
+首段源码与6项模拟bridge检查见[BP2 Evidence](docs/evidence/2026-10-28-bp2-source.md)；Windows离线Rust 9项通过（含独立进程中断恢复），Vue/Tauri壳与真实连接尚未完成。
 
 ## 前身项目需要修正（只记录，不在本仓库动手；需要时到对应项目执行）
 
