@@ -1,5 +1,5 @@
 project:
-  name: bob-unified
+  name: bob-agent
   directory: bob-agent
   version: 0.0.0
   status: planning

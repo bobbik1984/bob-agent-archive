@@ -5,7 +5,7 @@
 
 ## 1 当前事实
 
-- 统一项目目录已建立，包含 Production 级文档骨架（2026-10-28），已初始化本地 Git 仓库，并在工作区 `project_registry.yaml` 中登记为 `bob_unified`。**尚无业务代码，GitHub 远端尚未配置（见 WP-04 剩余项）。**
+- 统一项目目录已建立，包含 Production 级文档骨架（2026-10-28），已初始化本地 Git 仓库，并在工作区 `project_registry.yaml` 中登记为 `bob_agent`（`bob-agent`）。**尚无业务代码，GitHub 远端尚未配置（见 WP-04 剩余项）。**
 - **WP-00 前身项目保护基线已完成并验证**：备份位于对应旧仓库的 `.backup/2026-10-28/`（已加入 `.git/info/exclude`），校验结果见 [evidence/2026-10-28-wp00-backup.md](evidence/2026-10-28-wp00-backup.md)。前身项目盘点见 [evidence/2026-10-28-legacy-inventory.md](evidence/2026-10-28-legacy-inventory.md)。
 - **已接受的决策**：BOB-D-001（新目录）、BOB-D-002（白领与普通开发者，单用户多设备）、BOB-D-003（Tauri Android，iOS 后期）、BOB-D-004（个人环境优先，**主库 Home 在 X1C**，代码走 GitHub 同步）、**BOB-D-005（单一 Rust 内核，多种部署形态）**。
 - **待裁决**：BOB-D-006（连接分层方案）、BOB-D-007（文档位置与 Drive 镜像）。
@@ -44,7 +44,7 @@
 
 ### WP-04 仓库初始化（剩余项）
 
-- 已完成：本地 `git init` 与首个提交；`project_registry.yaml` 登记 `bob_unified`。
+- 已完成：本地 `git init` 与首个提交；`project_registry.yaml` 登记 `bob_agent`（`bob-agent`）。
 - 待完成：绑定 GitHub 远端并推送（本机未安装 `gh` CLI，需用户提供新建的 GitHub 仓库地址或授权创建方式）；引入工具链前做 `sync_cache_offloader` dry-run 审计。
 
 ## 3 允许与禁止
