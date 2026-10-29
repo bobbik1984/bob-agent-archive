@@ -195,4 +195,4 @@
 
 ### Android构建方式调整
 
-用户于2026-10-29要求使用GitHub自动构建：停止本机JDK/SDK/NDK下载，本机只保留现有ADB用于Pixel 8安装与验证。新增手动触发的`.github/workflows/android-dev.yml`，产出独立`org.bobagent.nextdev` ARM64 debug APK、源码提交与SHA256；不创建Release。工作流尚未上传或实际运行，不代表APK已生成。首次配对、Android安全存储和Home接线仍按原BP3继续。
+用户于2026-10-29要求使用GitHub自动构建：停止本机JDK/SDK/NDK下载，本机只保留现有ADB用于Pixel 8安装与验证。新增手动触发的`.github/workflows/android-dev.yml`，产出独立`org.bobagent.nextdev` ARM64 debug APK、源码提交与SHA256；不创建Release。工作流已上传并实际运行成功（run 40809505137，提交49546d0）；独立APK已安装到Pixel 8并冷启动，数据库完整性通过。具体证据见现有shell检查文档。手机点击保存/重开交互与Home连接仍未验收。首次配对、Android安全存储和Home接线仍按原BP3继续。
