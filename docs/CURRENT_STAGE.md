@@ -196,3 +196,7 @@
 ### Android构建方式调整
 
 用户于2026-10-29要求使用GitHub自动构建：停止本机JDK/SDK/NDK下载，本机只保留现有ADB用于Pixel 8安装与验证。新增手动触发的`.github/workflows/android-dev.yml`，产出独立`org.bobagent.nextdev` ARM64 debug APK、源码提交与SHA256；不创建Release。工作流已上传并实际运行成功（run 40809505137，提交49546d0）；独立APK已安装到Pixel 8并冷启动，数据库完整性通过。具体证据见现有shell检查文档。手机点击保存/重开交互与Home连接仍未验收。首次配对、Android安全存储和Home接线仍按原BP3继续。
+
+### Android 16 KB兼容修正（2026-10-29）
+
+用户真机截图证明首包存在LOAD段4KB对齐缺陷；启动和数据库成功不代表16KB兼容。e62d55f在Android原生链接加入max/common-page-size=16384，打包前检查全部ELF LOAD/RELRO与zipalign。GitHub run 40810731635全部通过，修复包尚待真机更新与弹窗复验。现有Pixel PAGE_SIZE=4096，不能声称16KB系统实测通过。手机顶栏与状态栏重叠也已由截图确认，沿BP2手机适配待修；Home接线仍未完成。
