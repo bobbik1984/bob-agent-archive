@@ -51,6 +51,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bob-apk"
           find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -exec cp {} "$RUNNER_TEMP/bob-apk/" \;
           test -n "$(find "$RUNNER_TEMP/bob-apk" -name '*.apk' -print -quit)"
+          for apk in "$RUNNER_TEMP/bob-apk/"*.apk; do
+            python3 tests/check-apk-alignment.py "$apk"
+            "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$apk"
+          done
           cd "$RUNNER_TEMP/bob-apk"
           sha256sum *.apk > SHA256SUMS
           printf 'commit=%s\nrun=%s\npackage=org.bobagent.nextdev\nkind=debug-not-release\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > BUILD.txt
