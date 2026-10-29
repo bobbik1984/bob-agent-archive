@@ -1,6 +1,5 @@
 use bob_kernel::{
     dispatch::*,
-    inbox::HomeMessageContext,
     outbox::{AppendMessage, Store},
     prewarm::WatchKey,
     wake::*,
@@ -94,11 +93,9 @@ impl Transport for HomeTransport {
         Box::pin(async move {
             self.sent.fetch_add(1, Ordering::SeqCst);
             let mut s = self.store.lock().unwrap();
-            let ctx = HomeMessageContext {
-                local_home_device_id: "home",
-                authenticated_origin_device_id: "replica",
-                authorized_conversation_id: "s",
-            };
+            let ctx = s
+                .authenticate_home_session("home", 1, &"a".repeat(64), "s", 5)
+                .unwrap();
             if let WireIntent::Message(m) = &job.intent {
                 s.receive_message(&ctx, m, 5).unwrap();
             } else {
@@ -115,15 +112,13 @@ impl Transport for HomeTransport {
         Box::pin(async move {
             self.looked.fetch_add(1, Ordering::SeqCst);
             let mut s = self.store.lock().unwrap();
-            let ctx = HomeMessageContext {
-                local_home_device_id: "home",
-                authenticated_origin_device_id: "replica",
-                authorized_conversation_id: "s",
-            };
+            let ctx = s
+                .authenticate_home_session("home", 1, &"a".repeat(64), "s", 5)
+                .unwrap();
             let WireIntent::Message(m) = &job.intent else {
                 panic!("wrong fixture intent")
             };
-            TransportResult::Receipt(s.lookup_message_receipt(&ctx, m).unwrap().unwrap())
+            TransportResult::Receipt(s.lookup_message_receipt(&ctx, m, 5).unwrap().unwrap())
         })
     }
 }
@@ -133,13 +128,15 @@ fn real_sqlite_home_commit_lost_ack_restart_lookup_no_resend() {
     let rp = d.path().join("r.sqlite");
     let hp = d.path().join("h.sqlite");
     let mut replica = fixture(&rp);
-    let home = fixture(&hp);
+    let mut home = fixture(&hp);
     rusqlite::Connection::open(&hp)
         .unwrap()
         .execute(
             "UPDATE devices SET trust_state='paired',public_key_ref='fake-key' WHERE id='replica'",
             [],
         )
+        .unwrap();
+    home.grant_home_conversation("home", 1, "replica", &"a".repeat(64), "s", 0, 100, true, 1)
         .unwrap();
     let transport = HomeTransport {
         store: Mutex::new(home),

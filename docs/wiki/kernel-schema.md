@@ -389,3 +389,7 @@ Runner IPC v1 最小信封：`protocol_version, request_id, execution_id, task_i
 原DDL保持不变。运行时共享唤醒由wake.rs负责，prewarm.rs仅为纯状态参考模型；dispatcher不持SQLite事务跨await。claim持久标记边界，按(target,lane)独占活动领取；complete核对attempt以拒绝迟到回调。确认零字节可有界退避，配置错误归needs_attention；租约过期/传输超时保持unknown，lookup的Absent不是重发凭证。
 
 HomeMessageContext必须由已认证且有会话访问授权的adapter构造；内核另查paired/public_key_ref/epoch。消息、事件、Inbox回执同事务；cancel_execution只请求停止，不标停止确认、不释放租约。真实配对/网络协议和answer_permission等业务尚未实现。当前检查见CURRENT_STAGE及运行Evidence。
+
+### App本机身份迁移0002
+
+新增app_local_identity(singleton,origin_device_id,default_session_id)。随机标识来自本地SQLite，与私钥/配对凭据无关；打开App时原子生成并保留。新安装本地authority仅供local保存，不表示远端已配置或设备已配对。0001原合同与hash不重写，0002有独立schema_migrations校验。

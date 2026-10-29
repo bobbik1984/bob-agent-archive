@@ -10,7 +10,7 @@ project:
   - Vue 3
   - Desktop
   - Android
-  current_task: BP2前三项内核链路完成：共享唤醒/Home接收/恢复调度，Windows离线34项通过；下一项Vue/Tauri IPC和真实Provider接线，BP2整体未完成
+  current_task: BP2/BP3 Home授权/TLS接收与查询及Windows vault已有实现；59内核+11TLS+12原生+17Node通过；首次配对/手机与手动停止仍待验收
   development_plan: docs/CURRENT_STAGE.md
 phases:
 - name: BP0 真相与保护
@@ -44,6 +44,6 @@ phases:
 - name: BP3 个人环境 MVP
   tasks:
   - text: BP3-01 X1C Home ↔ Android Replica 核心同步与远程文件只读浏览
-    status: todo
+    status: active
   - text: BP3-02 接入 Harness Runner 进程边界并在统一 UI 跑通任务治理闭环
-    status: todo
+    status: active

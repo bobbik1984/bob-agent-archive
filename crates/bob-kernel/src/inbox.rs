@@ -3,44 +3,8 @@ use crate::outbox::{digest, AppendMessage, Error, HomeReceipt, Result, Store};
 use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
 use serde_json::json;
 
-/// Supplied by a trusted, authenticated and operation-authorized adapter.
-/// Not deserialized from a remote request. Constructing this value does not
-/// authenticate a peer: the caller must have checked its transport identity
-/// and granted access to this exact conversation (including new creation).
-pub struct HomeMessageContext<'a> {
-    pub local_home_device_id: &'a str,
-    pub authenticated_origin_device_id: &'a str,
-    pub authorized_conversation_id: &'a str,
-}
-
-fn authorize(
-    tx: &Transaction<'_>,
-    ctx: &HomeMessageContext<'_>,
-    request: &AppendMessage,
-) -> Result<()> {
-    if ctx.local_home_device_id != request.home_device_id
-        || ctx.authenticated_origin_device_id != request.origin_device_id
-        || ctx.authorized_conversation_id != request.session_id
-        || [
-            &request.request_id,
-            &request.session_id,
-            &request.message_id,
-            &request.origin_device_id,
-            &request.home_device_id,
-        ]
-        .iter()
-        .any(|s| s.trim().is_empty())
-    {
-        return Err(Error::InvalidTransition);
-    }
-    let permitted: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM home_authority h JOIN devices d ON d.id=?1 WHERE h.device_id=?2 AND h.epoch=?3 AND d.trust_state='paired' AND d.public_key_ref IS NOT NULL AND length(d.public_key_ref)>0)",
-        params![ctx.authenticated_origin_device_id,ctx.local_home_device_id,request.home_epoch], |r|r.get(0))?;
-    if !permitted {
-        return Err(Error::InvalidTransition);
-    }
-    Ok(())
-}
+use crate::home_auth::authorize;
+pub use crate::home_auth::HomeMessageContext;
 
 fn prior(tx: &Transaction<'_>, request: &AppendMessage, hash: &str) -> Result<Option<HomeReceipt>> {
     let found: Option<(String,i64,String,String)> = tx.query_row(
@@ -68,7 +32,7 @@ impl Store {
     /// returns the original outcome without appending another message or event.
     pub fn receive_message(
         &mut self,
-        ctx: &HomeMessageContext<'_>,
+        ctx: &HomeMessageContext,
         request: &AppendMessage,
         now: i64,
     ) -> Result<HomeReceipt> {
@@ -76,7 +40,7 @@ impl Store {
         let tx = self
             .db
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        authorize(&tx, ctx, request)?;
+        authorize(&tx, ctx, request, now, false)?;
         if let Some(receipt) = prior(&tx, request, &hash)? {
             tx.commit()?;
             return Ok(receipt);
@@ -134,14 +98,15 @@ impl Store {
     /// permission to resend. Restored/truncated history needs separate fencing.
     pub fn lookup_message_receipt(
         &mut self,
-        ctx: &HomeMessageContext<'_>,
+        ctx: &HomeMessageContext,
         request: &AppendMessage,
+        now: i64,
     ) -> Result<Option<HomeReceipt>> {
         let hash = digest(&serde_json::to_vec(request)?);
         let tx = self
             .db
             .transaction_with_behavior(TransactionBehavior::Deferred)?;
-        authorize(&tx, ctx, request)?;
+        authorize(&tx, ctx, request, now, false)?;
         let result = prior(&tx, request, &hash)?;
         tx.commit()?;
         Ok(result)
@@ -153,7 +118,7 @@ impl Store {
     /// its workspace lease stays held until the runner confirms termination.
     pub fn receive_cancel(
         &mut self,
-        ctx: &HomeMessageContext<'_>,
+        ctx: &HomeMessageContext,
         request: &crate::dispatch::CancelExecution,
         now: i64,
     ) -> Result<HomeReceipt> {
@@ -162,7 +127,7 @@ impl Store {
         let tx = self
             .db
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        authorize(&tx, ctx, &binding)?;
+        authorize(&tx, ctx, &binding, now, true)?;
         if let Some(receipt) = prior(&tx, &binding, &hash)? {
             tx.commit()?;
             return Ok(receipt);
@@ -197,15 +162,16 @@ impl Store {
 
     pub fn lookup_cancel_receipt(
         &mut self,
-        ctx: &HomeMessageContext<'_>,
+        ctx: &HomeMessageContext,
         request: &crate::dispatch::CancelExecution,
+        now: i64,
     ) -> Result<Option<HomeReceipt>> {
         let hash = digest(&serde_json::to_vec(request)?);
         let binding = cancel_binding(request);
         let tx = self
             .db
             .transaction_with_behavior(TransactionBehavior::Deferred)?;
-        authorize(&tx, ctx, &binding)?;
+        authorize(&tx, ctx, &binding, now, true)?;
         let receipt = prior(&tx, &binding, &hash)?;
         tx.commit()?;
         Ok(receipt)

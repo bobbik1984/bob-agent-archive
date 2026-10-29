@@ -16,12 +16,10 @@ fn request() -> AppendMessage {
         content: json!({"text":"hello"}),
     }
 }
-fn ctx() -> HomeMessageContext<'static> {
-    HomeMessageContext {
-        local_home_device_id: "home",
-        authenticated_origin_device_id: "replica",
-        authorized_conversation_id: "s1",
-    }
+const PIN: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+fn ctx(s: &mut Store) -> HomeMessageContext {
+    s.authenticate_home_session("home", 1, PIN, "s1", 1)
+        .unwrap()
 }
 fn fixture(path: &std::path::Path) -> Store {
     let mut store = Store::open(path, 1).unwrap();
@@ -30,6 +28,9 @@ fn fixture(path: &std::path::Path) -> Store {
         .unwrap();
     // Test-only trust fixture. Production pairing must authenticate/authorize.
     Connection::open(path).unwrap().execute("UPDATE devices SET trust_state='paired',public_key_ref='fixture-key-ref' WHERE id='replica'",[]).unwrap();
+    store
+        .grant_home_conversation("home", 1, "replica", PIN, "s1", 0, 100, true, 1)
+        .unwrap();
     store
 }
 fn counts(path: &std::path::Path) -> (i64, i64, i64) {
@@ -48,21 +49,22 @@ fn home_acceptance_receipt_survives_restart_without_duplicate_effects() {
     let d = tempfile::tempdir().unwrap();
     let p = d.path().join("home.sqlite");
     let mut s = fixture(&p);
-    let receipt = s.receive_message(&ctx(), &request(), 2).unwrap();
+    let context = ctx(&mut s);
+    let receipt = s.receive_message(&context, &request(), 2).unwrap();
     assert!(receipt.accepted);
     drop(s);
     let mut s = Store::open(&p, 3).unwrap();
     let lookup = s
-        .lookup_message_receipt(&ctx(), &request())
+        .lookup_message_receipt(&context, &request(), 5)
         .unwrap()
         .unwrap();
     assert_eq!(lookup.payload_sha256, receipt.payload_sha256);
-    s.receive_message(&ctx(), &request(), 4).unwrap();
+    s.receive_message(&context, &request(), 4).unwrap();
     assert_eq!(counts(&p), (1, 1, 1));
     let mut changed = request();
     changed.content = json!({"text":"different"});
-    assert!(s.receive_message(&ctx(), &changed, 5).is_err());
-    assert!(s.lookup_message_receipt(&ctx(), &changed).is_err());
+    assert!(s.receive_message(&context, &changed, 5).is_err());
+    assert!(s.lookup_message_receipt(&context, &changed, 5).is_err());
     assert_eq!(counts(&p), (1, 1, 1));
 }
 #[test]
@@ -70,24 +72,19 @@ fn rejects_wrong_identity_epoch_scope_and_revoked_peer() {
     let d = tempfile::tempdir().unwrap();
     let p = d.path().join("home.sqlite");
     let mut s = fixture(&p);
-    let wrong = HomeMessageContext {
-        authenticated_origin_device_id: "other",
-        ..ctx()
-    };
-    assert!(s.receive_message(&wrong, &request(), 2).is_err());
-    let wrong = HomeMessageContext {
-        local_home_device_id: "replica",
-        ..ctx()
-    };
-    assert!(s.receive_message(&wrong, &request(), 2).is_err());
-    let wrong = HomeMessageContext {
-        authorized_conversation_id: "other",
-        ..ctx()
-    };
-    assert!(s.receive_message(&wrong, &request(), 2).is_err());
+    let context = ctx(&mut s);
+    for field in ["origin", "home", "conversation"] {
+        let mut wrong = request();
+        match field {
+            "origin" => wrong.origin_device_id = "other".into(),
+            "home" => wrong.home_device_id = "other".into(),
+            _ => wrong.session_id = "other".into(),
+        }
+        assert!(s.receive_message(&context, &wrong, 2).is_err());
+    }
     let mut r = request();
     r.home_epoch = 2;
-    assert!(s.receive_message(&ctx(), &r, 2).is_err());
+    assert!(s.receive_message(&context, &r, 2).is_err());
     Connection::open(&p)
         .unwrap()
         .execute(
@@ -95,8 +92,8 @@ fn rejects_wrong_identity_epoch_scope_and_revoked_peer() {
             [],
         )
         .unwrap();
-    assert!(s.receive_message(&ctx(), &request(), 2).is_err());
-    assert!(s.lookup_message_receipt(&ctx(), &request()).is_err());
+    assert!(s.receive_message(&context, &request(), 2).is_err());
+    assert!(s.lookup_message_receipt(&context, &request(), 5).is_err());
     assert_eq!(counts(&p), (0, 0, 0));
 }
 #[test]
@@ -104,12 +101,13 @@ fn event_failure_rolls_back_message_and_receipt() {
     let d = tempfile::tempdir().unwrap();
     let p = d.path().join("home.sqlite");
     let mut s = fixture(&p);
+    let context = ctx(&mut s);
     let c = Connection::open(&p).unwrap();
     c.execute_batch("CREATE TRIGGER fixture_failure BEFORE INSERT ON domain_events BEGIN SELECT RAISE(ABORT,'fixture'); END;").unwrap();
-    assert!(s.receive_message(&ctx(), &request(), 2).is_err());
+    assert!(s.receive_message(&context, &request(), 2).is_err());
     assert_eq!(counts(&p), (0, 0, 0));
     c.execute_batch("DROP TRIGGER fixture_failure;").unwrap();
-    s.receive_message(&ctx(), &request(), 3).unwrap();
+    s.receive_message(&context, &request(), 3).unwrap();
     assert_eq!(counts(&p), (1, 1, 1));
 }
 #[test]
@@ -117,15 +115,16 @@ fn absent_query_is_not_receipt_and_message_id_collision_does_not_record_acceptan
     let d = tempfile::tempdir().unwrap();
     let p = d.path().join("home.sqlite");
     let mut s = fixture(&p);
+    let context = ctx(&mut s);
     assert!(s
-        .lookup_message_receipt(&ctx(), &request())
+        .lookup_message_receipt(&context, &request(), 5)
         .unwrap()
         .is_none());
-    s.receive_message(&ctx(), &request(), 2).unwrap();
+    s.receive_message(&context, &request(), 2).unwrap();
     let mut r = request();
     r.request_id = "r2".into();
-    assert!(s.receive_message(&ctx(), &r, 3).is_err());
-    assert!(s.lookup_message_receipt(&ctx(), &r).unwrap().is_none());
+    assert!(s.receive_message(&context, &r, 3).is_err());
+    assert!(s.lookup_message_receipt(&context, &r, 5).unwrap().is_none());
     assert_eq!(counts(&p), (1, 1, 1));
 }
 
@@ -155,14 +154,15 @@ fn cancel_is_durable_request_not_stop_confirmation() {
     let d = tempfile::tempdir().unwrap();
     let p = d.path().join("home.sqlite");
     let mut s = fixture(&p);
-    s.receive_message(&ctx(), &request(), 2).unwrap();
+    let context = ctx(&mut s);
+    s.receive_message(&context, &request(), 2).unwrap();
     execution_fixture(&p);
-    assert!(s.receive_cancel(&ctx(), &cancel(), 3).unwrap().accepted);
-    assert!(s.receive_cancel(&ctx(), &cancel(), 4).unwrap().accepted);
+    assert!(s.receive_cancel(&context, &cancel(), 3).unwrap().accepted);
+    assert!(s.receive_cancel(&context, &cancel(), 4).unwrap().accepted);
     drop(s);
     let mut s = Store::open(&p, 5).unwrap();
     assert!(
-        s.lookup_cancel_receipt(&ctx(), &cancel())
+        s.lookup_cancel_receipt(&context, &cancel(), 5)
             .unwrap()
             .unwrap()
             .accepted
@@ -185,12 +185,13 @@ fn stale_cancel_rejection_is_persistent_and_does_not_change_execution() {
     let d = tempfile::tempdir().unwrap();
     let p = d.path().join("home.sqlite");
     let mut s = fixture(&p);
-    s.receive_message(&ctx(), &request(), 2).unwrap();
+    let context = ctx(&mut s);
+    s.receive_message(&context, &request(), 2).unwrap();
     execution_fixture(&p);
     let mut bad = cancel();
     bad.expected_version = 9;
-    assert!(!s.receive_cancel(&ctx(), &bad, 3).unwrap().accepted);
-    assert!(!s.receive_cancel(&ctx(), &bad, 4).unwrap().accepted);
+    assert!(!s.receive_cancel(&context, &bad, 3).unwrap().accepted);
+    assert!(!s.receive_cancel(&context, &bad, 4).unwrap().accepted);
     let stop: Option<i64> = Connection::open(&p)
         .unwrap()
         .query_row(
@@ -203,7 +204,7 @@ fn stale_cancel_rejection_is_persistent_and_does_not_change_execution() {
     assert_eq!(counts(&p), (1, 2, 1));
     let mut changed = bad;
     changed.expected_version = 1;
-    assert!(s.receive_cancel(&ctx(), &changed, 5).is_err());
+    assert!(s.receive_cancel(&context, &changed, 5).is_err());
 }
 
 #[test]
@@ -214,10 +215,11 @@ fn home_local_first_message_promotes_atomically_without_duplicate() {
     Connection::open(&p).unwrap().execute("UPDATE devices SET trust_state='paired',public_key_ref='fixture-home-key' WHERE id='home'",[]).unwrap();
     let mut r = request();
     r.origin_device_id = "home".into();
-    let c = HomeMessageContext {
-        authenticated_origin_device_id: "home",
-        ..ctx()
-    };
+    s.grant_home_conversation("home", 1, "home", &"b".repeat(64), "s1", 0, 100, true, 1)
+        .unwrap();
+    let c = s
+        .authenticate_home_session("home", 1, &"b".repeat(64), "s1", 1)
+        .unwrap();
     let saved = s.accept_message(&r, 2).unwrap();
     s.begin_attempt(&r.request_id, 3).unwrap();
     let receipt = s.receive_message(&c, &r, 4).unwrap();
@@ -235,10 +237,11 @@ fn mismatched_local_message_cannot_be_promoted() {
     Connection::open(&p).unwrap().execute("UPDATE devices SET trust_state='paired',public_key_ref='fixture-home-key' WHERE id='home'",[]).unwrap();
     let mut r = request();
     r.origin_device_id = "home".into();
-    let c = HomeMessageContext {
-        authenticated_origin_device_id: "home",
-        ..ctx()
-    };
+    s.grant_home_conversation("home", 1, "home", &"b".repeat(64), "s1", 0, 100, true, 1)
+        .unwrap();
+    let c = s
+        .authenticate_home_session("home", 1, &"b".repeat(64), "s1", 1)
+        .unwrap();
     s.accept_message(&r, 2).unwrap();
     Connection::open(&p)
         .unwrap()

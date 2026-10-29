@@ -55,7 +55,7 @@
 - 保留语义：Goal/Milestone分组、唯一Task、Execution尝试、不可变成果父版、检查与人审、请求幂等、签名/吊销及进程归属。
 - 必须适配：旧App的rpc_staged_outbox为接收配置暂存；write_mobile_outbox是JSON写命令；旧Online四条governed路径是AGY/Pi/DSH/Codex，Generic API仍是旧PTY路径。
 - 必须重写：Home/Replica同步、跨认证会话的持久请求回执、单飞预热与Outbox、统一领域写入入口。不能迁入磁盘失败退回内存或吞SQL错误的“成功”路径。
-- 代码迁入尚未获文件级批准；本表不是搬迁许可。统一项目没有运行时实现，Schema检查不替代产品验收。
+- 代码迁入尚未获文件级批准；本表不是搬迁许可。该段为WP-01时点记录；当前运行实现见下方BP2落点，Schema检查不替代产品验收。
 
 ## 1.0.1 新写源码落点（2026-10-28）
 
@@ -69,3 +69,25 @@
 - `src/inbox.rs`（同crate）：Home原子消息/回执与受控停止请求。
 - `src/dispatch.rs`、`src/deadline.rs`（同crate）：持久领取与结果提交、有界异步等待，无跨await数据库借用。
 - `tests/wake.rs`、`tests/inbox.rs`、`tests/dispatch.rs`：10+8+7项运行回归。实际网络/Tauri adapter仍未接。
+
+## App IPC源码落点（2026-10-29）
+
+- `crates/bob-kernel/src/app.rs`、`migrations/0002.sql`：LocalApp、本机身份与默认会话，2项Rust测试通过。
+- `apps/bob-app/src/App.vue`、`src/kernel-bridge.mjs`、`src/native-bridge.mjs`：Vue输入/状态和真实Tauri invoke映射；9项Node控制器/bridge检查，非原生窗口证据。
+- `apps/bob-app/src-tauri/`：独立Tauri构建单元，避免内核离线回归意外解析GUI依赖；与根Workspace共用bob-kernel路径依赖，不是第二业务内核。已通过外置原生编译和开发进程启动；窗口交互待验。
+
+## 本机受管执行落点（2026-10-29）
+
+- crates/bob-kernel/src/local_execution.rs：同一Task/Execution/lease与回复事务、停止请求、可信退出恢复；不创建第二任务系统。
+- apps/bob-app/src-tauri/src/runner.rs：门控Worker、Windows Job进程归属、取消/超时与子进程退出。
+- apps/bob-app/src-tauri/src/lib.rs：app_execute/app_cancel/app_executions及持久完成回执恢复；前端不能提交伪造结果。
+- apps/bob-app/src/execution-controller.mjs、App.vue：发送接线、单飞轮询、停止按钮和真实回复来源显示。
+- apps/bob-app/src-tauri/tests/fixtures/fake_cli.rs：操作系统进程故障验证专用，不是模型。
+- 当前检查与未验边界统一见[CURRENT_STAGE](CURRENT_STAGE.md)和[shell证据](evidence/2026-10-29-bp2-shell.md)。
+
+## Home传输与权限落点
+
+- `crates/bob-kernel/src/home_auth.rs`、`migrations/0003.sql`：可信本地授权管理、精确会话授权及每次业务操作校验；不负责配对或签发凭据。
+- `crates/bob-transport/`：标准双向TLS、实际观测身份、有界帧与Home接收适配；测试证书仅位于测试代码。
+- `apps/bob-app/src-tauri/src/device_vault.rs`：Windows DPAPI原生凭据槽，其他平台明确不可用。
+- `apps/bob-app/src/App.vue`：输入框旁固定停止入口，与消息行复用同一取消命令。

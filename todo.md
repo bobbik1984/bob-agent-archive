@@ -11,7 +11,7 @@
 
 ### BP0 → BP1（架构与规格定案）
 - [x] **WP-01**：静态深度盘点完成，见 [Evidence](docs/evidence/2026-10-28-wp01-deep-inventory.md)；旧测试/现场数据库/全历史secret扫描未运行
-- [x] **WP-02**：Schema/预热Outbox设计草案完成，见 [kernel-schema](docs/wiki/kernel-schema.md)；25项内存DDL约束通过，尚未实现，BP1定案仍需WP-03
+- [x] **WP-02**：Schema/预热Outbox设计草案完成，见 [kernel-schema](docs/wiki/kernel-schema.md)；25项内存DDL约束通过；后续已有内核运行实现，见BP2当前证据
 - [x] **WP-03**：连接配置与威胁模型设计获批；不代表真实安全测试通过，BOB-D-007镜像选项仍待定
 
 ### BP2 → BP3（1.0.1 骨架与个人工作环境 MVP）
@@ -20,7 +20,10 @@
 - [ ] **BP3-01**：打通 X1C Home 主库 ↔ 手机 Tauri Android Replica 的会话、捕获、待办与远程文件只读浏览（F4）
 - [ ] **BP3-02**：通过进程边界接入 Harness Runner（DSH / AGY / Codex / Generic API），在统一 UI 中跑通 Task → Execution → Artifact 预览与 Review 闭环
 
-首段源码与6项模拟bridge检查见[BP2 Evidence](docs/evidence/2026-10-28-bp2-source.md)；共享唤醒/Home接收/调度已实现，Windows离线Rust 34项通过；Vue/Tauri壳与真实连接尚未完成。见[运行证据](docs/evidence/2026-10-29-bp2-runtime.md)。
+当前证据：内核59项、实际TLS套接字11项、原生12项、Node17项及前端构建通过。Home授权/加密接收与回执查询、Windows DPAPI已实现；测试证书不代表首次配对。真实彩虹回复正常完成；第二轮真实调用超时且清理确认；两轮都没有停止请求，手动停止仍待验收。见[当前施工](docs/CURRENT_STAGE.md)和[shell证据](docs/evidence/2026-10-29-bp2-shell.md)。
+
+- [/] BP2/BP3：本机只读执行与固定Stop入口；继续完成停止按钮真实操作、窄屏与可用性验收。
+- [/] Home认证基础：持久设备/会话授权、TLS接收及回执查询完成本机验证；继续首次配对、App投递/回复同步和Android Keystore/真机，不以CLI登录或测试证书代替配对。
 
 ## 前身项目需要修正（只记录，不在本仓库动手；需要时到对应项目执行）
 

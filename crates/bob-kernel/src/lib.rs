@@ -7,3 +7,11 @@ pub mod inbox;
 pub mod wake;
 
 mod deadline;
+
+pub mod app;
+
+pub mod harness_reply;
+
+pub mod local_execution;
+
+pub mod home_auth;

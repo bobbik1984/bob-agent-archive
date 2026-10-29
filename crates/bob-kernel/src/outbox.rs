@@ -42,7 +42,7 @@ pub struct AppendMessage {
     pub content: Value,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct LocalAccepted {
     pub request_id: String,
     pub message_id: String,
@@ -168,6 +168,26 @@ impl Store {
                 "INSERT INTO schema_migrations VALUES(1,?1,?2)",
                 params![checksum, now],
             )?;
+        }
+        let grant_schema = include_str!("../migrations/0003.sql");
+        let grant_hash = digest(grant_schema.replace("\r\n", "\n").as_bytes());
+        let previous: Option<String> = tx
+            .query_row(
+                "SELECT checksum FROM schema_migrations WHERE version=3",
+                [],
+                |r| r.get(0),
+            )
+            .optional()?;
+        match previous {
+            Some(v) if v != grant_hash => return Err(Error::SchemaMismatch),
+            Some(_) => {}
+            None => {
+                tx.execute_batch(grant_schema)?;
+                tx.execute(
+                    "INSERT INTO schema_migrations VALUES(3,?1,?2)",
+                    params![grant_hash, now],
+                )?;
+            }
         }
         tx.commit()?;
         let mut store = Self { db, _owner: owner };

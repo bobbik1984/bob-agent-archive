@@ -43,7 +43,7 @@
 
 ## 6 WP-03 Connection Provider契约草案
 
-2026-10-28：接口与安全要求设计完成，尚无运行实现或网络测量。安全准则见[threat-model](threat-model.md)，投递语义只在[kernel-schema](kernel-schema.md)维护。
+2026-10-29：接口与安全要求设计已获批；当前已有双向TLS和Home授权接收模块，本机套接字验证不等于跨设备网络测量。安全准则见[threat-model](threat-model.md)，投递语义只在[kernel-schema](kernel-schema.md)维护。
 
 Connection Provider负责discover、connect/authenticate、send、lookup_receipt、subscribe(cursor)、close；返回结构化能力与错误，不裁决Task完成。send必须报告confirmed_zero、started_or_possible或durable_receipt，不能将笼统网络错误猜成未发送。协议不兼容与身份变化停止恢复，网络瞬断才退避重试。
 
@@ -52,3 +52,5 @@ Connection Provider负责discover、connect/authenticate、send、lookup_receipt
 L1的mDNS只是发现，不能以“同一局域网”免除认证；L2与L3同样验证设备身份。L4承载相同加密意图与回执，不同步活动SQLite，上传完成不等于Home收到。L5是可选部署角色，不是第五种传输协议，也不自动接管Home。
 
 个人环境第一条实现建议为现有受控连接Provider＋本地Outbox，先完成一条Windows Home与Android Replica的真实链路。L2具体库和L4云盘接口尚未选定；本页早先关于供应商价格/公共服务限制的引用为历史研究，本轮未重新核实，不作为当前选型证据。开源默认组合设计已按BOB-D-006接受，具体Provider选型及现场验证仍待推进。
+
+当前实现范围：TLS 1.3与持久Home会话授权构成首条直连传输的基础，地址和身份由宿主注入；未配置时不自动监听或建立信任。短时邀请/PoP/用户确认、App投递调度、Android Keystore与真实手机仍是下一步，不能将单机测试证书用于正式配对。

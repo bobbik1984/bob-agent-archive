@@ -47,7 +47,7 @@
 
 ## 5 验证、Evidence 与 Handoff
 
-- 新模块附带正常路径与异常路径测试；具体命令在代码骨架建立后登记于此。轻量控制器测试：`node --test apps/bob-app/tests/send-controller.test.mjs`。Rust测试：`cargo test --offline -p bob-kernel`，涉及编译，须先获具体授权且设置外置缓存目录；不得因测试名义绕过构建门禁。
+- 新模块附带正常路径与异常路径测试；具体命令在代码骨架建立后登记于此。原生命令测试（外置副本、已获编译授权）：`cargo test --offline --manifest-path apps/bob-app/src-tauri/Cargo.toml --lib --features native-tests`；使用Tauri测试Runtime与真实SQLite，不代表窗口验收。轻量控制器测试：`node --test apps/bob-app/tests/send-controller.test.mjs`。Rust测试：`cargo test --offline -p bob-kernel`，涉及编译，须先获具体授权且设置外置缓存目录；不得因测试名义绕过构建门禁。
 - 完成判定：任务卡验收项逐条有证据；本地通过 ≠ 真机通过 ≠ 公网通过，分别记录。Agent 自报完成不是 Evidence。
 - Evidence 写入 `docs/evidence/`（仅脱敏内容）；原始敏感证据放在仓库外。
 - Handoff 包含：目标、基线版本、改动清单、通过/失败/未运行的检查、剩余门槛、回退步骤。
