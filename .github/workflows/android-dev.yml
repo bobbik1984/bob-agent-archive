@@ -13,9 +13,6 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    env:
-      CARGO_TARGET_DIR: ${{ runner.temp }}/bob-target
-      GRADLE_USER_HOME: ${{ runner.temp }}/bob-gradle
     defaults:
       run:
         working-directory: apps/bob-app
@@ -32,6 +29,8 @@ jobs:
           java-version: '21'
       - name: Prepare declared tools
         run: |
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/bob-target" >> "$GITHUB_ENV"
+          echo "GRADLE_USER_HOME=$RUNNER_TEMP/bob-gradle" >> "$GITHUB_ENV"
           corepack enable
           corepack prepare pnpm@11.13.0 --activate
           rustup target add aarch64-linux-android
